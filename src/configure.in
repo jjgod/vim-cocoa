@@ -208,12 +208,21 @@ if test "`(uname) 2>/dev/null`" = Darwin; then
     dnl Removed -no-cpp-precomp, only for very old compilers.
     CPPFLAGS="$CPPFLAGS -DMACOS_X_UNIX"
 
-    dnl If Carbon is found, assume we don't want X11
-    dnl unless it was specifically asked for (--with-x)
+    dnl If Carbon or Cocoa is found, assume we don't want
+    dnl X11 unless it was specifically asked for (--with-x)
     dnl or Motif, Athena or GTK GUI is used.
     AC_CHECK_HEADER(Carbon/Carbon.h, CARBON=yes)
-    if test "x$CARBON" = "xyes"; then
-      if test -z "$with_x" -a "X$enable_gui" != Xmotif -a "X$enable_gui" != Xathena -a "X$enable_gui" != Xgtk2; then
+
+    SAVE_CPPFLAGS=$CPPFLAGS
+    SAVE_CFLAGS=$CFLAGS
+    CPPFLAGS="$CPPFLAGS -ObjC"
+    CFLAGS="$CFLAGS -ObjC"
+    AC_CHECK_HEADER(Cocoa/Cocoa.h, COCOA=yes)
+    CPPFLAGS=$SAVE_CPPFLAGS
+    CFLAGS=$SAVE_CFLAGS
+
+    if test "x$CARBON" = "xyes" -o "x$COCOA" = "xyes"; then
+      if test -z "$with_x" -a "X$enable_gui" != Xmotif -a "X$enable_gui" != Xathena -a "X$enable_gui" != Xgtk -a "X$enable_gui" != Xgtk2; then
 	with_x=no
       fi
     fi
@@ -2070,7 +2079,7 @@ test "x$with_x" = xno -a "x$MACOSX" != "xyes" -a "x$QNX" != "xyes" && enable_gui
 
 AC_MSG_CHECKING(--enable-gui argument)
 AC_ARG_ENABLE(gui,
- [  --enable-gui[=OPTS]     X11 GUI [default=auto] [OPTS=auto/no/gtk2/gnome2/motif/athena/neXtaw/photon/carbon]], , enable_gui="auto")
+ [  --enable-gui[=OPTS]     X11 GUI [default=auto] [OPTS=auto/no/gtk2/gnome2/motif/athena/neXtaw/photon/carbon/cocoa]], , enable_gui="auto")
 
 dnl Canonicalize the --enable-gui= argument so that it can be easily compared.
 dnl Do not use character classes for portability with old tools.
@@ -2085,6 +2094,7 @@ SKIP_ATHENA=YES
 SKIP_NEXTAW=YES
 SKIP_PHOTON=YES
 SKIP_CARBON=YES
+SKIP_COCOA=YES
 GUITYPE=NONE
 
 if test "x$QNX" = "xyes" -a "x$with_x" = "xno" ; then
@@ -2101,15 +2111,21 @@ if test "x$QNX" = "xyes" -a "x$with_x" = "xno" ; then
 
 elif test "x$MACOSX" = "xyes" -a "x$with_x" = "xno" ; then
   SKIP_CARBON=
+  SKIP_COCOA=
   case "$enable_gui_canon" in
     no)		AC_MSG_RESULT(no GUI support)
-		SKIP_CARBON=YES ;;
+		SKIP_CARBON=YES
+		SKIP_COCOA=YES ;;
     yes|"")	AC_MSG_RESULT(yes - automatic GUI support) ;;
     auto)	AC_MSG_RESULT(auto - Carbon GUI is outdated - disable GUI support)
 		SKIP_CARBON=YES ;;
-    carbon)	AC_MSG_RESULT(Carbon GUI support) ;;
-    *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported])
+    carbon)	AC_MSG_RESULT(Carbon GUI support)
+		SKIP_COCOA=YES ;;
+    cocoa)	AC_MSG_RESULT(Cocoa GUI support)
 		SKIP_CARBON=YES ;;
+    *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported])
+		SKIP_CARBON=YES
+		SKIP_COCOA=YES ;;
   esac
 
 else
@@ -2122,6 +2138,7 @@ else
 		SKIP_MOTIF=
 		SKIP_ATHENA=
 		SKIP_NEXTAW=
+		SKIP_COCOA=
 		SKIP_CARBON=;;
     gtk2)	AC_MSG_RESULT(GTK+ 2.x GUI support)
 		SKIP_GTK2=;;
@@ -2207,12 +2224,30 @@ if test "x$SKIP_CARBON" != "xYES" -a "$enable_gui_canon" != "carbon"; then
   fi
 fi
 
+if test "x$SKIP_COCOA" != "xYES" -a "$enable_gui_canon" != "cocoa"; then
+  AC_MSG_CHECKING(whether or not to look for Cocoa)
+  AC_ARG_ENABLE(cocoa-check,
+	[  --enable-cocoa-check    If auto-select GUI, check for Cocoa [default=yes]],
+	, enable_cocoa_check="yes")
+  AC_MSG_RESULT($enable_cocoa_check);
+  if test "x$enable_cocoa_check" = "xno"; then
+    SKIP_COCOA=YES
+  fi
+fi
 
-if test "x$MACOSX" = "xyes" -a -z "$SKIP_CARBON" -a "x$CARBON" = "xyes"; then
-  AC_MSG_CHECKING(for Carbon GUI)
-  dnl already did the check, just give the message
-  AC_MSG_RESULT(yes);
-  GUITYPE=CARBONGUI
+if test "x$MACOSX" = "xyes"; then
+  if test -z "$SKIP_CARBON" -a "x$CARBON" = "xyes"; then
+    AC_MSG_CHECKING(for Carbon GUI)
+    dnl already did the check, just give the message
+    AC_MSG_RESULT(yes);
+    GUITYPE=CARBONGUI
+  elif test -z "$SKIP_COCOA" -a "x$COCOA" = "xyes"; then
+    AC_MSG_CHECKING(for Cocoa GUI)
+    dnl already did the check, just give the message
+    AC_MSG_RESULT(yes);
+    GUITYPE=COCOAGUI
+  fi
+
   if test "$VIMNAME" = "vim"; then
     VIMNAME=Vim
   fi
@@ -2238,6 +2273,7 @@ if test "x$MACOSX" = "xyes" -a -z "$SKIP_CARBON" -a "x$CARBON" = "xyes"; then
   SKIP_ATHENA=YES;
   SKIP_NEXTAW=YES;
   SKIP_PHOTON=YES;
+  SKIP_COCOA=YES;
   SKIP_CARBON=YES
 fi
 
