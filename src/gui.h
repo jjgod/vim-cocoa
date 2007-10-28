@@ -138,7 +138,7 @@
 #define DRAW_BOLD		0x02	/* draw bold text */
 #define DRAW_UNDERL		0x04	/* draw underline text */
 #define DRAW_UNDERC		0x08	/* draw undercurl text */
-#if defined(FEAT_GUI_GTK)
+#if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_COCOA)
 # define DRAW_ITALIC		0x10	/* draw italic text */
 #endif
 #define DRAW_CURSOR		0x20	/* drawing block cursor (win32) */
@@ -203,8 +203,12 @@ typedef struct GuiScrollbar
 				   scroll_shift is set to the number of shifts
 				   to reduce the count.  */
 #endif
-#ifdef FEAT_GUI_MAC
+#ifdef FEAT_GUI_CARBON
     ControlHandle id;		/* A handle to the scrollbar */
+#endif
+#ifdef FEAT_GUI_COCOA
+    void       *scroller;       /* instance of NSScroller */
+    int         enabled;
 #endif
 #ifdef FEAT_GUI_PHOTON
     PtWidget_t	*id;
