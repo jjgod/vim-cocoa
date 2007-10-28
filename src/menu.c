@@ -2270,6 +2270,7 @@ ex_emenu(exarg_T *eap)
 }
 
 #if defined(FEAT_GUI_MSWIN) \
+	|| (defined(FEAT_GUI_COCOA) && defined(FEAT_MENU)) \
 	|| (defined(FEAT_GUI_GTK) && defined(FEAT_MENU)) \
 	|| defined(FEAT_BEVAL_TIP) || defined(PROTO)
 /*

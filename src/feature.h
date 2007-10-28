@@ -825,7 +825,7 @@
 #endif
 
 /* Mac specific thing: Codewarrior interface. */
-#ifdef FEAT_GUI_MAC
+#ifdef FEAT_GUI_CARBON
 # define FEAT_CW_EDITOR
 #endif
 
@@ -1147,7 +1147,7 @@
 /*
  * +dnd		Drag'n'drop support.  Always used for the GTK+ GUI.
  */
-#if defined(FEAT_CLIPBOARD) && defined(FEAT_GUI_GTK)
+#if defined(FEAT_CLIPBOARD) && (defined(FEAT_GUI_GTK) || defined(FEAT_GUI_COCOA))
 # define FEAT_DND
 #endif
 

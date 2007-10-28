@@ -3027,7 +3027,7 @@ struct VimMenu
     HMENU	submenu_id;	    /* If this is submenu, add children here */
     HWND	tearoff_handle;	    /* hWnd of tearoff if created */
 #endif
-#ifdef FEAT_GUI_MAC
+#ifdef FEAT_GUI_CARBON
 /*  MenuHandle	id; */
 /*  short	index;	*/	    /* the item index within the father menu */
     short	menu_id;	    /* the menu id to which this item belong */
@@ -3035,6 +3035,10 @@ struct VimMenu
 				       get through some tricks) */
     MenuHandle	menu_handle;
     MenuHandle	submenu_handle;
+#endif
+#ifdef FEAT_GUI_COCOA
+    void       *menu_handle;        /* NSMenu *, only for menus with submenus */
+    void       *item_handle;        /* NSMenuItem *, for all menus */
 #endif
 #ifdef FEAT_GUI_PHOTON
     PtWidget_t	*id;

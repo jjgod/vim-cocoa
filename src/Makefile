@@ -1345,7 +1345,7 @@ PHOTONGUI_BUNDLE =
 # CARBON GUI
 CARBONGUI_SRC	= gui.c gui_mac.c
 CARBONGUI_OBJ	= objects/gui.o objects/gui_mac.o objects/pty.o
-CARBONGUI_DEFS	= -DFEAT_GUI_MAC -fno-common -fpascal-strings \
+CARBONGUI_DEFS	= -DFEAT_GUI_MAC -DFEAT_GUI_CARBON -fno-common -fpascal-strings \
 		  -Wall -Wno-unknown-pragmas \
 		  -mdynamic-no-pic -pipe
 CARBONGUI_IPATH	= -I. -Iproto
@@ -1359,6 +1359,23 @@ CARBONGUI_TESTTARGET = gui
 CARBONGUI_BUNDLE = gui_bundle
 APPDIR = $(VIMNAME).app
 CARBONGUI_TESTARG = VIMPROG=../$(APPDIR)/Contents/MacOS/$(VIMTARGET)
+
+# COCOA GUI
+COCOAGUI_SRC	= gui.c gui_mac.m
+COCOAGUI_OBJ	= objects/gui.o objects/gui_nmac.o objects/pty.o
+COCOAGUI_DEFS	= -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -fno-common -fpascal-strings \
+		  -Wall -Wno-unknown-pragmas \
+		  -mdynamic-no-pic -pipe
+COCOAGUI_IPATH	= -I. -Iproto
+COCOAGUI_LIBS_DIR =
+COCOAGUI_LIBS1	= -framework Cocoa
+COCOAGUI_LIBS2	=
+COCOAGUI_INSTALL = install_macosx
+COCOAGUI_TARGETS =
+COCOAGUI_MAN_TARGETS =
+COCOAGUI_TESTTARGET = gui
+COCOAGUI_BUNDLE = gui_bundle
+COCOAGUI_TESTARG = VIMPROG=../$(APPDIR)/Contents/MacOS/$(VIMTARGET)
 
 # All GUI files
 ALL_GUI_SRC  = gui.c gui_gtk.c gui_gtk_f.c gui_motif.c gui_xmdlg.c gui_xmebw.c gui_athena.c gui_gtk_x11.c gui_x11.c gui_at_sb.c gui_at_fs.c pty.c
@@ -2961,6 +2978,9 @@ objects/gui_photon.o: gui_photon.c
 objects/gui_mac.o: gui_mac.c
 	$(CCC) -o $@ gui_mac.c
 
+objects/gui_nmac.o: gui_mac.m
+	$(CCC) -ObjC -o $@ gui_mac.m
+
 objects/hangulin.o: hangulin.c
 	$(CCC) -o $@ hangulin.c
 
@@ -3203,7 +3223,7 @@ bundle-info:  bundle-dir
 	@echo "Creating Info.plist"
 	m4 $(M4FLAGSX) infplist.xml > $(APPDIR)/Contents/Info.plist
 
-bundle-resource: bundle-dir bundle-rsrc
+bundle-resource: bundle-dir
 	cp -f $(RSRC_DIR)/*.icns $(RESDIR)
 
 ### Classic resources
