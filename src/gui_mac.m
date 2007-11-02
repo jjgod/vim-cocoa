@@ -2888,9 +2888,12 @@ void gui_mac_open_window()
         original_char = [[event charactersIgnoringModifiers] characterAtIndex: 0];
 
         /* Intercept CMD-. and CTRL-c */
-        if (((vim_modifiers & MOD_MASK_CTRL) && original_char == 'c') ||
-            ((vim_modifiers & MOD_MASK_CMD)  && original_char == '.'))
+        if ((modified_char == Ctrl_C && ctrl_c_interrupts) ||
+            (modified_char == intr_char && intr_char != Ctrl_C))
+        {
+            trash_input_buf();
             got_int = TRUE;
+        }
 
         // gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
         //             original_char, modified_char);
