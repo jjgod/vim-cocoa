@@ -499,7 +499,7 @@ static struct vimoption options[] =
     {"antialias",   "anti", P_BOOL|P_VI_DEF|P_VIM|P_RCLR,
 #if defined(FEAT_GUI) && defined(MACOS_X)
 			    (char_u *)&p_antialias, PV_NONE,
-			    {(char_u *)FALSE, (char_u *)FALSE}
+			    {(char_u *)TRUE, (char_u *)TRUE}
 #else
 			    (char_u *)NULL, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)FALSE}
