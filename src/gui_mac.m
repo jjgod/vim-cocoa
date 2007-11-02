@@ -14,9 +14,9 @@
  *
  * TODO:
  *
- * 1. Scrollbars.
- * 2. Toolbar.
- * 3. GUI Tab.
+ * 1. Toolbar.
+ * 2. GUI Tab.
+ * 3. Multiple Windows.
  */
 
 #include "vim.h"
@@ -370,6 +370,8 @@ void gui_mch_exit(int rc)
     [gui_mac.selected_file release];
     [gui_mac.app_delegate release];
     [gui_mac.app_pool release];
+
+    [[NSUserDefaults standardUserDefaults] synchronize];
 
     exit(rc);
 }
@@ -740,7 +742,7 @@ void gui_mch_set_foreground()
 
 void gui_mch_set_winpos(int x, int y)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_set_winpos: %d, %d", x, y);
+    gui_mac_msg(MSG_WARN, @"gui_mch_set_winpos: %d, %d", x, y);
 
     /* Get the visiable area (excluding menubar and dock) of screen */
     NSRect visibleFrame = [[NSScreen mainScreen] visibleFrame];
@@ -2246,6 +2248,16 @@ finish:
     gui_mac_update();
 }
 
+- (void) windowDidMove:(NSNotification *)notification
+{
+    NSRect frame = [gui_mac.content_window frame];
+    NSPoint topLeft = NSMakePoint(frame.origin.x, NSMaxY(frame));
+    NSString *topLeftString = NSStringFromPoint(topLeft);
+
+    [[NSUserDefaults standardUserDefaults]
+        setObject: topLeftString forKey: @"VIMTopLeftPoint"];
+}
+
 @end
 
 /* Application Related Utilities 2}}} */
@@ -2367,8 +2379,21 @@ NSWindow *gui_mac_get_window()
 
 void gui_mac_open_window()
 {
-    [gui_mac.content_window center];
-    [gui_mac.content_window makeKeyAndOrderFront: nil];
+    NSWindow *window = gui_mac.content_window;
+    NSPoint topLeft = NSZeroPoint;
+
+    NSString *topLeftString =
+        [[NSUserDefaults standardUserDefaults] stringForKey: @"VIMTopLeftPoint"];
+    if (topLeftString)
+        topLeft = NSPointFromString(topLeftString);
+
+
+    if (NSEqualPoints(topLeft, NSZeroPoint))
+        [window center];
+    else
+        [window setFrameTopLeftPoint: topLeft];
+
+    [window makeKeyAndOrderFront: nil];
 }
 
 /* Window related Utilities 2}}} */
@@ -2398,6 +2423,7 @@ void gui_mac_open_window()
 {
     [markedTextAttributes release];
     [markedText release];
+
     [super dealloc];
 }
 
