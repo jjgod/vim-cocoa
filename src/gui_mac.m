@@ -283,6 +283,7 @@ void      gui_mac_create_atsui_style();
 void      gui_mac_dispose_atsui_style();
 ATSUStyle gui_mac_atsui_style_from_width(int width);
 void      gui_mac_atsui_style_set_boolean(ATSUStyle layout, ATSUAttributeTag tag, Boolean value);
+void      gui_mac_atsui_style_set_int(ATSUStyle style, ATSUAttributeTag tag, UInt32 value);
 
 int gui_mac_select_from_font_panel(char_u *font_name);
 void gui_mac_update_scrollbar(scrollbar_T *sb);
@@ -1462,7 +1463,7 @@ void gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
 
     rect = NSMakeRect(left,
                       FILL_Y(gui.row) + gui.char_height - h,
-                      1, h);
+                      w, h);
 
     gui_mac_begin_drawing();
 
@@ -1517,7 +1518,9 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     if (flags & DRAW_ITALIC)
         gui_mac_atsui_style_set_boolean(style, kATSUQDItalicTag, true);
 
-
+    gui_mac_atsui_style_set_int(style, kATSUStyleRenderingOptionsTag,
+                                p_antialias ? kATSStyleApplyAntiAliasing
+                                            : kATSStyleNoAntiAliasing);
 
     ATSUSetTextPointerLocation(layout, text,
                                kATSUFromTextBeginning, kATSUToTextEnd,
@@ -3222,7 +3225,7 @@ void gui_mac_set_font_attributes(GuiFont vim_font)
     fontID    = [mac_font _atsFontID];
     fontSize  = Long2Fix([mac_font pointSize]);
     fontWidth = Long2Fix(gui.char_width);
-    options   = kATSStyleNoAntiAliasing;
+    options   = p_antialias ? kATSStyleApplyAntiAliasing : kATSStyleNoAntiAliasing;
 
     ATSUAttributeTag attribTags[] =
     {
