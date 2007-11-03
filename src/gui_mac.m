@@ -22,7 +22,7 @@
 #include "vim.h"
 #import <Cocoa/Cocoa.h>
 
-#define GUI_COCOA_DEBUG     1
+#define GUI_MAC_DEBUG     1
 
 /* Internal Data Structures {{{ */
 
@@ -344,7 +344,6 @@ int gui_mch_init()
     gui_mac.input_received = NO;
     gui_mac.initialized    = NO;
     gui_mac.last_shellsize = NSZeroSize;
-    gui_mac.debug_level    = MSG_WARN;
 
     gui_mac_clean_dirty_rect();
 
@@ -394,6 +393,7 @@ void gui_mch_prepare(int *argc, char **argv)
 
     NSString *path = [[NSBundle mainBundle] executablePath];
 
+    gui_mac.debug_level = MSG_WARN;
     gui_mac_msg(MSG_INFO, @"gui_mch_prepare: %@", path);
 
     exe_name = vim_strsave((char_u *) [path fileSystemRepresentation]);
@@ -742,7 +742,7 @@ void gui_mch_set_foreground()
 
 void gui_mch_set_winpos(int x, int y)
 {
-    gui_mac_msg(MSG_WARN, @"gui_mch_set_winpos: %d, %d", x, y);
+    gui_mac_msg(MSG_INFO, @"gui_mch_set_winpos: %d, %d", x, y);
 
     /* Get the visiable area (excluding menubar and dock) of screen */
     NSRect visibleFrame = [[NSScreen mainScreen] visibleFrame];
@@ -1713,34 +1713,6 @@ void clip_mch_request_selection(VimClipboard *cbd)
 
 /* Scrollbar related {{{ */
 
-void gui_mch_create_scrollbar(scrollbar_T *sb, int orient)
-{
-#if 0
-    gui_mac_msg(MSG_INFO, @"gui_mch_create_scrollbar: ident = %ld, "
-                "type = %d, value = %ld, size = %ld, "
-                "max = %ld, top = %d, height = %d, "
-                "width = %d, status_height = %d, %s",
-                sb->ident, sb->type, sb->value, sb->size, sb->max,
-                sb->top, sb->height, sb->width, sb->status_height,
-                orient == SBAR_HORIZ ? "H" : "V");
-#endif
-    VIMScroller *scroller;
-
-    scroller = [[VIMScroller alloc] initWithVimScrollbar: sb
-                                             orientation: orient];
-    sb->scroller = (void *) scroller;
-}
-
-void gui_mch_destroy_scrollbar(scrollbar_T *sb)
-{
-    VIMScroller *scroller = gui_mac_get_scroller(sb);
-
-    if (scroller != nil)
-        [scroller release];
-
-    sb->scroller = NULL;
-}
-
 const char *scrollbar_desc(scrollbar_T *sb)
 {
     switch (sb->type)
@@ -1757,6 +1729,39 @@ const char *scrollbar_desc(scrollbar_T *sb)
     default:
         return "NONE";
     }
+}
+
+void gui_mch_create_scrollbar(scrollbar_T *sb, int orient)
+{
+    gui_mac_msg(MSG_INFO, @"gui_mch_create_scrollbar: ident = %ld, "
+                "type = %s, value = %ld, size = %ld, "
+                "max = %ld, top = %d, height = %d, "
+                "width = %d, status_height = %d, %s",
+                sb->ident, scrollbar_desc(sb),
+                sb->value, sb->size, sb->max,
+                sb->top, sb->height, sb->width, sb->status_height,
+                orient == SBAR_HORIZ ? "H" : "V");
+    VIMScroller *scroller;
+
+    scroller = [[VIMScroller alloc] initWithVimScrollbar: sb
+                                             orientation: orient];
+    sb->scroller = (void *) scroller;
+}
+
+void gui_mch_destroy_scrollbar(scrollbar_T *sb)
+{
+    VIMScroller *scroller = gui_mac_get_scroller(sb);
+
+    gui_mac_msg(MSG_INFO, @"gui_mch_destroy_scrollbar: %s (%ld)",
+                scrollbar_desc(sb), sb->ident);
+
+    sb->enabled = FALSE;
+    gui_mac_update_scrollbar(sb);
+
+    if (scroller != nil)
+        [scroller release];
+
+    sb->scroller = NULL;
 }
 
 void gui_mch_enable_scrollbar(scrollbar_T *sb, int flag)
@@ -1779,7 +1784,7 @@ void gui_mch_set_scrollbar_pos(
     int w,
     int h)
 {
-    gui_mac_msg(MSG_DEBUG, @"set scrollbar pos: %s (%ld), (%d, %d, %d, %d)",
+    gui_mac_msg(MSG_INFO, @"set scrollbar pos: %s (%ld), (%d, %d, %d, %d)",
                 scrollbar_desc(sb), sb->ident, x, y, w, h);
 
     gui_mac_update_scrollbar(sb);
