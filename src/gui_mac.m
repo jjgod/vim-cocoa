@@ -201,8 +201,6 @@ struct gui_mac_data {
     int         im_row, im_col;
     NSEvent    *last_mouse_down_event;
 
-    NSSize      last_shellsize;
-
     int         debug_level;
     bool        showing_tabline;
 
@@ -330,7 +328,6 @@ int gui_mch_init()
     gui_mac.current_window = nil;
     gui_mac.input_received = NO;
     gui_mac.initialized    = NO;
-    gui_mac.last_shellsize = NSZeroSize;
     gui_mac.showing_tabline = NO;
 
     return OK;
@@ -404,33 +401,31 @@ void gui_mch_set_shellsize(
     contentRect.size.width = width;
     contentRect.size.height = height;
 
-    gui_mac.last_shellsize = contentRect.size;
-
-    gui_mac_msg(MSG_DEBUG, @"gui_mch_set_shellsize: "
+    gui_mac_msg(MSG_INFO, @"gui_mch_set_shellsize: "
                 "(%d, %d, %d, %d, %d, %d, %d)\n",
                 width, height, min_width, min_height,
                 base_width, base_height, direction);
 
-    gui_mac_msg(MSG_DEBUG, @"gui.num_rows (%d) * gui.char_height (%d) = %d",
+    gui_mac_msg(MSG_INFO, @"gui.num_rows (%d) * gui.char_height (%d) = %d",
                 gui.num_rows, gui.char_height, gui.num_rows * gui.char_height);
 
-    gui_mac_msg(MSG_DEBUG, @"gui.num_cols (%d) * gui.char_width (%d) = %d",
+    gui_mac_msg(MSG_INFO, @"gui.num_cols (%d) * gui.char_width (%d) = %d",
                 gui.num_cols, gui.char_width, gui.num_cols * gui.char_width);
 
     NSRect frame = [window frameRectForContentRect: contentRect];
-    NSShowRect("window frame", frame);
     [window setFrame: frame display: NO];
 }
 
 void gui_mch_set_text_area_pos(int x, int y, int w, int h)
 {
-    gui_mac_msg(MSG_DEBUG, @"gui_mch_set_text_area_pos: "
+    gui_mac_msg(MSG_INFO, @"gui_mch_set_text_area_pos: "
                 "%d, %d, %d, %d", x, y, w, h);
 
     NSRect viewRect = NSMakeRect(x, y, w, h);
     // If we don't have a text view yet, allocate it first
     if (! currentView)
     {
+        NSShowRect("create textView: ", viewRect);
         VIMTextView *textView = [[VIMTextView alloc] initWithFrame: viewRect];
         [textView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
 
@@ -439,8 +434,13 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
     }
     else
     {
-        [currentView setFrame: viewRect];
-        [currentView resetContentImage];
+        if (! NSEqualRects([currentView frame], viewRect))
+        {
+            NSShowRect("gui_mch_set_text_area_pos: resize to", viewRect);
+
+            [currentView setFrame: viewRect];
+            [currentView resetContentImage];
+        }
     }
 }
 
@@ -559,7 +559,7 @@ void gui_mch_get_screen_dimensions(int *screen_w, int *screen_h)
     *screen_w = (int) rect.size.width;
     *screen_h = (int) rect.size.height;
 
-    gui_mac_msg(MSG_DEBUG, @"gui_mch_get_screen_dimensions: %d, %d",
+    gui_mac_msg(MSG_INFO, @"gui_mch_get_screen_dimensions: %d, %d",
                 *screen_w, *screen_h);
 }
 
@@ -732,7 +732,7 @@ int gui_mch_adjust_charheight()
                              NSClosableWindowMask |
                             NSResizableWindowMask;
 
-    NSShowRect("VIMWindow initWithContentRect", contentRect);
+    // NSShowRect("VIMWindow initWithContentRect", contentRect);
     if ([super initWithContentRect: contentRect
                          styleMask: windowStyle
                            backing: NSBackingStoreBuffered
@@ -796,7 +796,7 @@ int gui_mch_get_winpos(int *x, int *y)
     NSRect windowRect = [gui_mac.current_window frame];
     NSRect visibleFrame = [[NSScreen mainScreen] visibleFrame];
 
-    NSShowRect("windowRect", windowRect);
+    // NSShowRect("windowRect", windowRect);
 
     float X_vim = windowRect.origin.x - visibleFrame.origin.x;
     float Y_vim = visibleFrame.origin.y + visibleFrame.size.height -
@@ -1901,7 +1901,9 @@ void gui_mch_set_curtab(int nr)
 
 void gui_mch_show_tabline(int showit)
 {
-    gui_mac.showing_tabline = YES;
+    gui_mac.showing_tabline = showit;
+
+    gui_mac_msg(MSG_DEBUG, @"gui_mch_show_tabline: %s", showit ? "YES" : "NO");
 }
 
 int gui_mch_showing_tabline()
@@ -2256,14 +2258,6 @@ finish:
     [NSApp stop: self];
 }
 
-- (NSSize) windowWillResize:(NSWindow *)window
-                     toSize:(NSSize)size
-{
-    gui_mac_msg(MSG_DEBUG, @"windowWillResize: (%g, %g)",
-                size.width, size.height);
-    return size;
-}
-
 - (void) windowDidResize:(NSNotification *)aNotification
 {
     NSSize size;
@@ -2272,22 +2266,18 @@ finish:
     if ([aNotification object] != gui_mac.current_window)
         return;
 
+    // if the textView is not allocated yet, it means initialization
+    // code from vim is not executed, so we don't need to pass this
+    // windowDidResize event to vim
+    if (! [gui_mac.current_window textView])
+        return;
+
     size   = [[gui_mac.current_window contentView] frame].size;
     width  = (int) size.width;
     height = (int) size.height;
 
     gui_mac_msg(MSG_DEBUG, @"windowDidResize: (%d, %d)", width, height);
-
-    /* prevent multiple resize caused by one action */
-    if (NSEqualSizes(gui_mac.last_shellsize, size))
-    {
-        gui_mac_msg(MSG_DEBUG, @"windowDidResize: already at (%d, %d), stop",
-                    width, height);
-        return;
-    }
-
     gui_resize_shell(width, height);
-    gui_set_shellsize(TRUE, FALSE, RESIZE_BOTH);
     gui_mac_update();
 }
 
@@ -2491,13 +2481,6 @@ void gui_mac_open_window()
     return self;
 }
 
-- (void) setFrame:(NSRect)frameRect
-{
-    NSShowRect("currentView setFrame", frameRect);
-
-    [super setFrame: frameRect];
-}
-
 - (void) resetContentImage
 {
     NSSize size = [self frame].size;
@@ -2538,7 +2521,6 @@ void gui_mac_open_window()
     [contentImage lockFocus];
 
     [gui_mac.bg_color set];
-    // NSShowRect("clear_all: content_rect", [self frame]);
     NSRectFill([self frame]);
 
     [contentImage unlockFocus];
