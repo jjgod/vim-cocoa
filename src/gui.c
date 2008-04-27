@@ -1333,7 +1333,7 @@ gui_position_components(int total_width UNUSED)
 #endif
 
 # if defined(FEAT_GUI_TABLINE) && (defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_MAC))
+	|| defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_COCOA))
     if (gui_has_tabline())
 	text_area_y += gui.tabline_height;
 #endif
@@ -4259,7 +4259,7 @@ gui_update_scrollbars(
 # endif
 #endif
 
-#if defined(FEAT_GUI_TABLINE) && defined(FEAT_GUI_MSWIN)
+#if defined(FEAT_GUI_TABLINE) && (defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_COCOA))
 	    if (gui_has_tabline())
 		y += gui.tabline_height;
 #endif
