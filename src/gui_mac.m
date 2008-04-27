@@ -104,6 +104,10 @@ static struct
     PSMTabBarControl *tabBarControl;
 }
 
+- (PSMTabBarControl *) tabBarControl;
+- (NSTabViewItem *) addNewTabViewItem;
+- (NSTabView *) tabView;
+
 @end
 
 @interface VIMTextView: NSView <NSTextInput>
@@ -120,7 +124,7 @@ static struct
 - (void) setMarkedTextAttribute:(id)value forKey:(NSString *)key;
 - (void) mouseAction:(int)button repeated:(bool)repeated event:(NSEvent *)event;
 
-- (void) resetContentImage;
+- (void) synchronizeContentImage;
 - (void) beginDrawing;
 - (void) endDrawing;
 
@@ -202,7 +206,8 @@ struct gui_mac_data {
     NSEvent    *last_mouse_down_event;
 
     int         debug_level;
-    bool        showing_tabline;
+    BOOL        showing_tabline;
+    BOOL        selecting_tab;
 
     ATSUStyle   font_style[VIM_MAX_CHAR_WIDTH];
 
@@ -240,16 +245,18 @@ NSAlertStyle NSAlertStyleFromVim(int type);
 #define      NSStringFromVim(str)    ([NSString stringWithUTF8String: (const char *) str])
 NSRect       NSRectFromVim(int row1, int col1, int row2, int col2);
 
-NSWindow *gui_mac_get_window();
-int       gui_mac_create_window();
+NSWindow *gui_mac_get_window(NSRect rect);
+int       gui_mac_create_window(NSRect rect);
 void      gui_mac_open_window();
 void      gui_mac_set_application_menu();
 void      gui_mac_send_dummy_event();
 void      gui_mac_update();
 
-#define currentView             ([gui_mac.current_window textView])
-#define gui_mac_begin_drawing() [currentView beginDrawing]
-#define gui_mac_end_drawing()   [currentView endDrawing]
+#define currentView                 ([gui_mac.current_window textView])
+#define gui_mac_begin_drawing()     [currentView beginDrawing]
+#define gui_mac_end_drawing()       [currentView endDrawing]
+#define gui_mac_begin_tab_action()  (gui_mac.selecting_tab = YES)
+#define gui_mac_end_tab_action()    (gui_mac.selecting_tab = NO)
 
 int  gui_mac_hex_digit(int c);
 void gui_mac_redraw();
@@ -285,7 +292,7 @@ void gui_mac_msg(int level, NSString *fmt, ...);
 
 int gui_mch_init()
 {
-    gui_mac_msg(MSG_DEBUG, @"gui_mch_init: %s", exe_name);
+    gui_mac_msg(MSG_INFO, @"gui_mch_init: %s", exe_name);
 
     gui_mac.app_pool = [NSAutoreleasePool new];
 
@@ -329,6 +336,7 @@ int gui_mch_init()
     gui_mac.input_received = NO;
     gui_mac.initialized    = NO;
     gui_mac.showing_tabline = NO;
+    gui_mac.selecting_tab  = NO;
 
     return OK;
 }
@@ -393,7 +401,7 @@ void gui_mch_set_shellsize(
     int base_height,
     int direction)
 {
-    NSWindow *window = gui_mac_get_window();
+    NSWindow *window = gui_mac_get_window(NSMakeRect(0, 0, width, height));
     NSRect contentRect = [window contentRectForFrameRect: [window frame]];
 
     /* keep the top left corner not change */
@@ -425,7 +433,7 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
     // If we don't have a text view yet, allocate it first
     if (! currentView)
     {
-        NSShowRect("create textView: ", viewRect);
+        // NSShowRect("create textView: ", viewRect);
         VIMTextView *textView = [[VIMTextView alloc] initWithFrame: viewRect];
         [textView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
 
@@ -435,12 +443,9 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
     else
     {
         if (! NSEqualRects([currentView frame], viewRect))
-        {
-            NSShowRect("gui_mch_set_text_area_pos: resize to", viewRect);
-
             [currentView setFrame: viewRect];
-            [currentView resetContentImage];
-        }
+
+        [currentView synchronizeContentImage];
     }
 }
 
@@ -623,8 +628,8 @@ int gui_mch_init_font(char_u *font_name, int fontset)
             /* Replace spaces in the font name with underscores. */
             for ( ; *new_p_guifont; ++new_p_guifont)
             {
-		    if (*new_p_guifont == ' ')
-		    *new_p_guifont = '_';
+                if (*new_p_guifont == ' ')
+                    *new_p_guifont = '_';
             }
         }
     }
@@ -686,9 +691,9 @@ GuiFont gui_mch_get_font(char_u *name, int giveErrorIfMissing)
 
     if (font == NOFONT)
     {
-	    if (giveErrorIfMissing)
-	    EMSG2(_(e_font), name);
-	return NOFONT;
+        if (giveErrorIfMissing)
+            EMSG2(_(e_font), name);
+        return NOFONT;
     }
     /*
      * TODO : Accept only monospace
@@ -730,16 +735,18 @@ int gui_mch_adjust_charheight()
     unsigned int windowStyle = NSTitledWindowMask |
                        NSMiniaturizableWindowMask |
                              NSClosableWindowMask |
-                            NSResizableWindowMask;
+                            NSResizableWindowMask |
+               NSUnifiedTitleAndToolbarWindowMask |
+                   NSTexturedBackgroundWindowMask;
 
     // NSShowRect("VIMWindow initWithContentRect", contentRect);
     if ([super initWithContentRect: contentRect
                          styleMask: windowStyle
                            backing: NSBackingStoreBuffered
-                             defer: NO])
+                             defer: YES])
     {
-        [self setBackgroundColor: [NSColor clearColor]];
-        [self setOpaque: YES];
+        // [self setBackgroundColor: [NSColor clearColor]];
+        // [self setOpaque: YES];
         [self setViewsNeedDisplay: NO];
         [self setTitle: @"gVIM on Macintosh"];
         [self setResizeIncrements: NSMakeSize(gui.char_width, gui.char_height)];
@@ -769,14 +776,14 @@ int gui_mch_adjust_charheight()
 
     textView = view;
     [[self contentView] addSubview: textView];
+    // [textView setHidden: YES];
 }
 
 @end
 
 void gui_mch_set_foreground()
 {
-    gui_mac_msg(MSG_DEBUG, @"gui_mch_set_foreground");
-
+    // gui_mac_msg(MSG_DEBUG, @"gui_mch_set_foreground");
     [gui_mac.current_window orderFront: nil];
 }
 
@@ -850,7 +857,7 @@ NSMenuItem *gui_mac_insert_menu_item(vimmenu_T *menu)
     brother = menu->next;
     /* My brother could be the PopUp, find my real brother */
     while ((brother != NULL) && (! menu_is_menubar(brother->name)))
-	    brother = brother->next;
+        brother = brother->next;
 
     if (STRNCMP(menu->dname, "-SEP", 4) == 0 ||
         STRNCMP(menu->dname, "-sep", 4) == 0)
@@ -1287,8 +1294,8 @@ guicolor_T gui_mch_get_color(char_u *name)
                                        green: &green
                                         blue: &blue
                                        alpha: &alpha];
-	    return (RGB(r, g, b));
-	}
+            return (RGB(r, g, b));
+        }
 
         /* Check if the name is one of the colors we know */
         for (i = 0; i < sizeof(table) / sizeof(table[0]); i++)
@@ -1300,47 +1307,47 @@ guicolor_T gui_mch_get_color(char_u *name)
      * Last attempt. Look in the file "$VIM/rgb.txt".
      */
 #define LINE_LEN 100
-	FILE	*fd;
-	char	line[LINE_LEN];
-	char_u	*fname;
+    FILE    *fd;
+    char    line[LINE_LEN];
+    char_u  *fname;
 
-	fname = expand_env_save((char_u *)"$VIMRUNTIME/rgb.txt");
-	if (fname == NULL)
-	    return INVALCOLOR;
+    fname = expand_env_save((char_u *)"$VIMRUNTIME/rgb.txt");
+    if (fname == NULL)
+        return INVALCOLOR;
 
-	fd = fopen((char *)fname, "rt");
-	vim_free(fname);
-	if (fd == NULL)
-	    return INVALCOLOR;
+    fd = fopen((char *)fname, "rt");
+    vim_free(fname);
+    if (fd == NULL)
+        return INVALCOLOR;
 
-	while (! feof(fd))
-	{
-	    int		len;
-	    int		pos;
-	    char	*color;
+    while (! feof(fd))
+    {
+        int     len;
+        int     pos;
+        char    *color;
 
-	    fgets(line, LINE_LEN, fd);
-	    len = strlen(line);
+        fgets(line, LINE_LEN, fd);
+        len = strlen(line);
 
-	    if (len <= 1 || line[len-1] != '\n')
-		continue;
+        if (len <= 1 || line[len-1] != '\n')
+        continue;
 
-	    line[len-1] = '\0';
+        line[len-1] = '\0';
 
-	    i = sscanf(line, "%d %d %d %n", &r, &g, &b, &pos);
-	    if (i != 3)
-		continue;
+        i = sscanf(line, "%d %d %d %n", &r, &g, &b, &pos);
+        if (i != 3)
+        continue;
 
-	    color = line + pos;
+        color = line + pos;
 
-	    if (STRICMP(color, name) == 0)
-	    {
-		    fclose(fd);
-		    return (guicolor_T) RGB(r, g, b);
-	    }
-	}
+        if (STRICMP(color, name) == 0)
+        {
+            fclose(fd);
+            return (guicolor_T) RGB(r, g, b);
+        }
+    }
 
-	fclose(fd);
+    fclose(fd);
 
     return INVALCOLOR;
 }
@@ -1439,9 +1446,9 @@ void gui_mch_delete_lines(int row, int num_lines)
     gui_mac_scroll_rect(src_rect, -num_lines);
 
     gui_clear_block(gui.scroll_region_bot - num_lines + 1,
-				gui.scroll_region_left,
-	            gui.scroll_region_bot,
-	            gui.scroll_region_right);
+                    gui.scroll_region_left,
+                    gui.scroll_region_bot,
+                    gui.scroll_region_right);
 }
 
 void gui_mch_insert_lines(int row, int num_lines)
@@ -1458,18 +1465,18 @@ void gui_mch_insert_lines(int row, int num_lines)
 
     /* Update gui.cursor_row if the cursor scrolled or copied over */
     if (gui.cursor_row >= gui.row
-	    && gui.cursor_col >= gui.scroll_region_left
-	    && gui.cursor_col <= gui.scroll_region_right)
+        && gui.cursor_col >= gui.scroll_region_left
+        && gui.cursor_col <= gui.scroll_region_right)
     {
-	    if (gui.cursor_row <= gui.scroll_region_bot - num_lines)
-	    gui.cursor_row += num_lines;
-	else if (gui.cursor_row <= gui.scroll_region_bot)
-	    gui.cursor_is_valid = FALSE;
+        if (gui.cursor_row <= gui.scroll_region_bot - num_lines)
+            gui.cursor_row += num_lines;
+        else if (gui.cursor_row <= gui.scroll_region_bot)
+            gui.cursor_is_valid = FALSE;
     }
 
     gui_clear_block(row, gui.scroll_region_left,
-				    row + num_lines - 1,
-				    gui.scroll_region_right);
+                    row + num_lines - 1,
+                    gui.scroll_region_right);
 }
 
 void gui_mch_draw_hollow_cursor(guicolor_T color)
@@ -1529,6 +1536,8 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     int          n;
     int          width_in_cell, last_width_in_cell = 1;
 
+    // gui_mac_msg(MSG_DEBUG, "gui_mch_draw_string: %d, %d, %d", row, col, len);
+
     ATSUStyle          style = gui_mac.font_style[0];
     ATSUTextLayout     layout;
     UniCharArrayOffset offset = 0;
@@ -1585,14 +1594,14 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
                       gui.char_height);
     if (has_mbyte)
     {
-	    int cell_len = 0;
-	    int n;
+        int cell_len = 0;
+        int n;
 
-	    /* Compute the length in display cells. */
-	    for (n = 0; n < len; n += MB_BYTE2LEN(s[n]))
-		    cell_len += (*mb_ptr2cells)(s + n);
+        /* Compute the length in display cells. */
+        for (n = 0; n < len; n += MB_BYTE2LEN(s[n]))
+            cell_len += (*mb_ptr2cells)(s + n);
 
-	    rect.size.width = gui.char_width * cell_len;
+        rect.size.width = gui.char_width * cell_len;
     }
 
     gui_mac_begin_drawing();
@@ -1897,13 +1906,19 @@ void gui_mch_start_blink()
 
 void gui_mch_set_curtab(int nr)
 {
+    gui_mac_msg(MSG_INFO, @"gui_mch_set_curtab(%d)", nr);
 }
 
 void gui_mch_show_tabline(int showit)
 {
+    VIMContentView *view;
+
     gui_mac.showing_tabline = showit;
 
-    gui_mac_msg(MSG_DEBUG, @"gui_mch_show_tabline: %s", showit ? "YES" : "NO");
+    gui_mac_msg(MSG_INFO, @"gui_mch_show_tabline: %s", showit ? "YES" : "NO");
+    view = [gui_mac.current_window contentView];
+    [[view tabBarControl] setHidden: (showit ? NO : YES)];
+    // NSShowRect("tabBarControl", [[view tabBarControl] frame]);
 }
 
 int gui_mch_showing_tabline()
@@ -1913,6 +1928,59 @@ int gui_mch_showing_tabline()
 
 void gui_mch_update_tabline()
 {
+    tabpage_T      *tp;
+    VIMContentView *view = [gui_mac.current_window contentView];
+    NSTabView      *tabView = [view tabView];
+    NSArray        *tabViewItems = [[view tabBarControl] representedTabViewItems];
+    int             i, j, originalTabCount = [tabViewItems count];
+    NSTabViewItem  *item;
+    int             currentTabIndex = tabpage_index(curtab) - 1;
+
+    gui_mac_msg(MSG_INFO, @"gui_mch_update_tabline: cti = %d, otc = %d",
+                currentTabIndex, originalTabCount);
+
+    for (tp = first_tabpage, i = 0;
+         tp != NULL;
+         tp = tp->tp_next, i++)
+    {
+        // This function puts the label of the tab in the global 'NameBuff'.
+        get_tabline_label(tp, FALSE);
+        char_u *s = NameBuff;
+        int len = STRLEN(s);
+        if (len <= 0) continue;
+
+        s = CONVERT_TO_UTF8(s);
+        // gui_mac_msg(MSG_DEBUG, @"label (%d): %s", i, s);
+        if (i >= originalTabCount)
+        {
+            gui_mac_begin_tab_action();
+            item = [view addNewTabViewItem];
+            gui_mac_end_tab_action();
+        }
+        else
+            item = [tabViewItems objectAtIndex: i];
+
+        [item setLabel: NSStringFromVim(s)];
+
+        CONVERT_TO_UTF8_FREE(s);
+    }
+
+    // gui_mac_msg(MSG_DEBUG, @"total tab count = %d", i);
+    for (j = originalTabCount - 1; j >= i; j--)
+    {
+        NSTabViewItem *item = [tabViewItems objectAtIndex: i];
+        [tabView removeTabViewItem: item];
+    }
+
+    tabViewItems = [[view tabBarControl] representedTabViewItems];
+    if (currentTabIndex < [tabViewItems count])
+    {
+        item = [tabViewItems objectAtIndex: currentTabIndex];
+
+        gui_mac_begin_tab_action();
+        [tabView selectTabViewItem: item];
+        gui_mac_end_tab_action();
+    }
 }
 
 /* GUI tab stuff }}} */
@@ -2047,19 +2115,19 @@ void gui_mac_send_dummy_event()
         int i;
         char_u *p;
 
-	/* these are the initial files dropped on the Vim icon */
-	for (i = 0 ; i < count; i++)
-	{
-	    if (ga_grow(&global_alist.al_ga, 1) == FAIL ||
-	        (p = vim_strsave(fnames[i])) == NULL)
-		    mch_exit(2);
-	    else
-		    alist_add(&global_alist, p, 2);
-	}
+        /* these are the initial files dropped on the Vim icon */
+        for (i = 0 ; i < count; i++)
+        {
+            if (ga_grow(&global_alist.al_ga, 1) == FAIL ||
+                (p = vim_strsave(fnames[i])) == NULL)
+                mch_exit(2);
+            else
+                alist_add(&global_alist, p, 2);
+        }
 
-	/* Change directory to the location of the first file. */
-	if (GARGCOUNT > 0 && vim_chdirfile(alist_name(&GARGLIST[0])) == OK)
-	    shorten_fnames(TRUE);
+        /* Change directory to the location of the first file. */
+        if (GARGCOUNT > 0 && vim_chdirfile(alist_name(&GARGLIST[0])) == OK)
+            shorten_fnames(TRUE);
 
         goto finish;
     }
@@ -2069,29 +2137,29 @@ void gui_mac_send_dummy_event()
 
     if (p != NULL)
     {
-	    if (mch_isdir(p))
-	    {
-		if (mch_chdir((char *)p) == 0)
-		    shorten_fnames(TRUE);
-	    }
-	    else if (vim_chdirfile(p) == OK)
-		    shorten_fnames(TRUE);
+        if (mch_isdir(p))
+        {
+            if (mch_chdir((char *)p) == 0)
+                shorten_fnames(TRUE);
+        }
+        else if (vim_chdirfile(p) == OK)
+            shorten_fnames(TRUE);
 
-	    vim_free(p);
-	}
+        vim_free(p);
+    }
 
-	/* Update the screen display */
-	update_screen(NOT_VALID);
+    /* Update the screen display */
+    update_screen(NOT_VALID);
 #ifdef FEAT_MENU
-	gui_update_menus(0);
+    gui_update_menus(0);
 #endif
-	setcursor();
-	out_flush();
+    setcursor();
+    out_flush();
 
     gui_mac_redraw();
 
 finish:
-	[NSApp replyToOpenOrPrint: NSApplicationDelegateReplySuccess];
+    [NSApp replyToOpenOrPrint: NSApplicationDelegateReplySuccess];
 }
 
 - (BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
@@ -2157,10 +2225,10 @@ finish:
 
 - (void) alertDidEnd:(VIMAlert *)alert returnCode:(int)returnCode contextInfo:(void *)contextInfo
 {
-	gui_mac.dialog_button = returnCode - NSAlertFirstButtonReturn + 1;
+    gui_mac.dialog_button = returnCode - NSAlertFirstButtonReturn + 1;
 
-	if ([alert isKindOfClass: [VIMAlert class]] &&
-	    [alert textField] && contextInfo)
+    if ([alert isKindOfClass: [VIMAlert class]] &&
+        [alert textField] && contextInfo)
         STRCPY((char_u *) contextInfo, [[[alert textField] stringValue] UTF8String]);
 
     [NSApp stop: self];
@@ -2276,8 +2344,9 @@ finish:
     width  = (int) size.width;
     height = (int) size.height;
 
-    gui_mac_msg(MSG_DEBUG, @"windowDidResize: (%d, %d)", width, height);
+    // gui_mac_msg(MSG_DEBUG, @"windowDidResize: (%d, %d)", width, height);
     gui_resize_shell(width, height);
+
     gui_mac_update();
 }
 
@@ -2365,11 +2434,11 @@ void gui_mac_set_application_menu()
 
 /* Window related Utilities {{{2 */
 
-int gui_mac_create_window()
+int gui_mac_create_window(NSRect rect)
 {
     VIMWindow *window;
 
-    window = [[VIMWindow alloc] initWithContentRect: NSZeroRect];
+    window = [[VIMWindow alloc] initWithContentRect: rect];
     gui_mac.current_window = window;
 
     [NSApp activateIgnoringOtherApps: YES];
@@ -2377,10 +2446,10 @@ int gui_mac_create_window()
     return OK;
 }
 
-NSWindow *gui_mac_get_window()
+NSWindow *gui_mac_get_window(NSRect rect)
 {
     if (gui_mac.current_window == nil)
-        gui_mac_create_window();
+        gui_mac_create_window(rect);
 
     return gui_mac.current_window;
 }
@@ -2413,9 +2482,10 @@ void gui_mac_open_window()
 {
     if ([super initWithFrame: rect])
     {
+        // NSShowRect("VIMContentView initWithFrame", rect);
         tabView = [[NSTabView alloc] initWithFrame:NSZeroRect];
-        NSRect tabFrame = NSMakeRect(0, rect.size.height - 22,
-                                     rect.size.width, 22);
+        NSRect tabFrame = NSMakeRect(0, 0,
+                                     rect.size.width, gui.tabline_height);
         tabBarControl = [[PSMTabBarControl alloc] initWithFrame: tabFrame];
         [tabView setDelegate: tabBarControl];
 
@@ -2423,12 +2493,14 @@ void gui_mac_open_window()
         [tabBarControl setDelegate: self];
         [tabBarControl setHidden: YES];
 
-        [self addSubview: tabBarControl];
+        [tabBarControl setCellMinWidth: 64];
+        [tabBarControl setCellMaxWidth: 64 * 6];
+        [tabBarControl setCellOptimumWidth: 132];
 
-        NSTabViewItem *item = [[NSTabViewItem alloc] initWithIdentifier: nil];
-        [item setLabel: @"hello"];
-        [tabView addTabViewItem: item];
-        [item release];
+        [tabBarControl setAutoresizingMask: NSViewWidthSizable | NSViewMaxYMargin];
+
+        [tabBarControl awakeFromNib];
+        [self addSubview: tabBarControl];
     }
 
     return self;
@@ -2442,6 +2514,24 @@ void gui_mac_open_window()
     [super dealloc];
 }
 
+- (PSMTabBarControl *) tabBarControl
+{
+    return tabBarControl;
+}
+
+- (NSTabView *) tabView
+{
+    return tabView;
+}
+
+- (NSTabViewItem *) addNewTabViewItem
+{
+    NSTabViewItem *item = [[NSTabViewItem alloc] initWithIdentifier: nil];
+    [tabView addTabViewItem: item];
+    [item release];
+    return item;
+}
+
 - (BOOL) isFlipped
 {
     return YES;
@@ -2449,9 +2539,53 @@ void gui_mac_open_window()
 
 - (void) drawRect:(NSRect)rect
 {
-    [[NSColor grayColor] set];
+    [[NSColor whiteColor] set];
     NSRectFill(rect);
 }
+
+/* PSMTabBarControl delegate {{{2 */
+
+-        (BOOL) tabView: (NSTabView *) theTabView
+shouldSelectTabViewItem: (NSTabViewItem *) tabViewItem
+{
+    gui_mac_msg(MSG_INFO, @"tabView:shouldSelectTabViewItem: %@, %s",
+                tabViewItem, gui_mac.selecting_tab == YES ? "YES" : "NO");
+
+    if (gui_mac.selecting_tab == NO)
+    {
+        NSArray *tabViewItems = [tabBarControl representedTabViewItems];
+        int idx = [tabViewItems indexOfObject: tabViewItem] + 1;
+
+        send_tabline_event(idx);
+        gui_mac_update();
+    }
+
+    return gui_mac.selecting_tab;
+}
+
+-       (BOOL) tabView: (NSTabView *) theTabView
+shouldCloseTabViewItem: (NSTabViewItem *) tabViewItem
+{
+    NSArray *tabViewItems = [tabBarControl representedTabViewItems];
+    int idx = [tabViewItems indexOfObject: tabViewItem] + 1;
+
+    send_tabline_menu_event(idx, TABLINE_MENU_CLOSE);
+    gui_mac_update();
+
+    return NO;
+}
+
+-   (void) tabView: (NSTabView *) theTabView
+didDragTabViewItem: (NSTabViewItem *) tabViewItem
+           toIndex: (int) idx
+{
+    gui_mac_msg(MSG_INFO, @"tabView:didDragTabViewItem: %@ toIndex: %d",
+                tabViewItem, idx);
+    tabpage_move(idx);
+    gui_mac_update();
+}
+
+/* PSMTabBarControl delegate 2}}} */
 
 @end
 
@@ -2481,7 +2615,7 @@ void gui_mac_open_window()
     return self;
 }
 
-- (void) resetContentImage
+- (void) synchronizeContentImage
 {
     NSSize size = [self frame].size;
 
@@ -2521,7 +2655,8 @@ void gui_mac_open_window()
     [contentImage lockFocus];
 
     [gui_mac.bg_color set];
-    NSRectFill([self frame]);
+    NSRectFill([self bounds]);
+    // NSShowRect("clearAll", [self bounds]);
 
     [contentImage unlockFocus];
 }
@@ -3254,8 +3389,8 @@ void gui_mac_create_atsui_style()
     for (i = 0; i < VIM_MAX_CHAR_WIDTH; i++)
         if (gui_mac.font_style[i] == NULL)
         {
-		if (ATSUCreateStyle(&(gui_mac.font_style[i])) != noErr)
-		    gui_mac.font_style[i] = NULL;
+            if (ATSUCreateStyle(&(gui_mac.font_style[i])) != noErr)
+                gui_mac.font_style[i] = NULL;
         }
 }
 
@@ -3266,8 +3401,8 @@ void gui_mac_dispose_atsui_style()
     for (i = 0; i < VIM_MAX_CHAR_WIDTH; i++)
         if (gui_mac.font_style[i] == NULL)
         {
-		if (ATSUDisposeStyle(gui_mac.font_style[i]) != noErr)
-		    gui_mac.font_style[i] = NULL;
+            if (ATSUDisposeStyle(gui_mac.font_style[i]) != noErr)
+                gui_mac.font_style[i] = NULL;
         }
 }
 
@@ -3283,8 +3418,8 @@ void gui_mac_set_font_attributes(GuiFont vim_font)
 {
     int               i;
     NSFont           *mac_font;
-    ATSUFontID	      fontID;
-    Fixed	          fontSize;
+    ATSUFontID        fontID;
+    Fixed             fontSize;
     Fixed             fontWidth;
     CGAffineTransform transform = CGAffineTransformMakeScale(1, -1);
     ATSStyleRenderingOptions options;
