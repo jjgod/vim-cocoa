@@ -758,6 +758,9 @@ int gui_mch_adjust_charheight()
         [self setContentView: contentView];
         [contentView release];
 
+        if ([self respondsToSelector: @selector(setBottomCornerRounded:)])
+            [self setBottomCornerRounded: NO];
+
         [self makeFirstResponder: textView];
     }
 
@@ -2621,7 +2624,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
     if (! NSEqualSizes([contentImage size], size))
     {
-        gui_mac_msg(MSG_DEBUG, @"REALLOCATE content image to: (%g, %g)",
+        gui_mac_msg(MSG_INFO, @"REALLOCATE content image to: (%g, %g)",
                     size.width, size.height);
         [contentImage release];
         contentImage = [[NSImage alloc] initWithSize: size];
