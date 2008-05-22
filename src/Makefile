@@ -1063,7 +1063,7 @@ INSTALL_PROG	= cp
 
 # Program to install the data in the target directory.	Cannot be "mv"!
 INSTALL_DATA	= cp
-INSTALL_DATA_R	= cp -r
+INSTALL_DATA_R	= cp -R
 
 ### Program to run on installed binary.  Use the second one to disable strip.
 #STRIP = strip
@@ -2887,7 +2887,8 @@ bundle-rsrc: os_mac.rsr.hqx
 #	cd po && perl Make_osx.pl --outdir ../$(RESDIR) $(MULTILANG)
 bundle-language: bundle-dir
 
-$(PSMTBC): $(PSMTBC_SRC)/PSMTabBarControlFramework-Info.plist
+$(PSMTBC):
+	@echo "Creating $(PSMTBC)"
 	cd $(PSMTBC_SRC); xcodebuild
 
 bundle-framework: $(FMWKDIR) $(PSMTBC)
