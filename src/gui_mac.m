@@ -85,7 +85,7 @@ static struct
 #define VIM_MAX_FONT_NAME_LEN   256
 #define VIM_MAX_BUTTON_TITLE    256
 #define VIM_DEFAULT_FONT_SIZE   9
-#define VIM_DEFAULT_FONT_NAME   (char_u *) "Monaco:h9"
+#define VIM_DEFAULT_FONT_NAME   (char_u *) "Monaco:h12"
 #define VIM_MAX_CHAR_WIDTH      2
 
 #define VIM_UNDERLINE_OFFSET        (-2)
