@@ -1295,6 +1295,9 @@ CARBONGUI_TESTARG = VIMPROG=../$(APPDIR)/Contents/MacOS/$(VIMTARGET)
 
 # COCOA GUI
 COCOAGUI_SRC	= gui.c gui_mac.m
+PSMTBC_SRC	= mac/PSMTabBarControl
+COCOAFMWK_DIR	= mac/build/Release
+PSMTBC          = $(COCOAFMWK_DIR)/PSMTabBarControl.framework
 COCOAGUI_OBJ	= objects/gui.o objects/gui_nmac.o objects/pty.o
 COCOAGUI_DEFS	= -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -fno-common -fpascal-strings \
 		  -Wall -Wno-unknown-pragmas \
@@ -1999,7 +2002,7 @@ installrtbase: $(HELPSOURCE)/vim.1 $(DEST_VIM) $(DEST_RT) \
 	-$(SHELL) ./installman.sh install $(DEST_MAN) "" $(INSTALLMANARGS)
 	@echo generating help tags
 # Generate the help tags with ":helptags" to handle all languages.
-	-@cd $(HELPSOURCE); $(MAKE) VIMEXE=$(DEST_BIN)/$(VIMTARGET) vimtags
+	-@srcdir=`pwd`; cd $(HELPSOURCE); $(MAKE) VIMEXE=$$srcdir/$(APPDIR)/Contents/MacOS/$(VIMTARGET) vimtags
 	cd $(HELPSOURCE); \
 		files=`ls *.txt tags`; \
 		files="$$files `ls *.??x tags-?? 2>/dev/null || true`"; \
@@ -2824,7 +2827,7 @@ install_macosx: gui_bundle
 	-rm $(RESDIR)/vim/runtime
 	$(INSTALL_DATA_R) $(APPDIR) $(DESTDIR)$(prefix)
 # Generate the help tags file now, it won't work with "make installruntime".
-	-@srcdir=`pwd`; cd $(HELPSOURCE); $(MAKE) VIMEXE=$$srcdir/$(VIMTARGET) vimtags
+	-@srcdir=`pwd`; cd $(HELPSOURCE); $(MAKE) VIMEXE=$$srcdir/$(APPDIR)/Contents/MacOS/$(VIMTARGET) vimtags
 # Install the runtime files.  Recursive!
 	-mkdir -p $(DESTDIR)$(prefix)/$(RESDIR)/vim/runtime
 #	-mkdir $(DESTDIR)$(prefix)/$(APPDIR)/bin
@@ -2883,6 +2886,13 @@ bundle-rsrc: os_mac.rsr.hqx
 #bundle-language: bundle-dir po/Make_osx.pl
 #	cd po && perl Make_osx.pl --outdir ../$(RESDIR) $(MULTILANG)
 bundle-language: bundle-dir
+
+$(PSMTBC): $(PSMTBC_SRC)/PSMTabBarControlFramework-Info.plist
+	cd $(PSMTBC_SRC); xcodebuild
+
+bundle-framework: $(FMWKDIR) $(PSMTBC)
+	rm -rf $(FMWKDIR)/PSMTabBarControl.framework
+	cp -Rf $(PSMTBC) $(FMWKDIR)
 
 $(APPDIR)/Contents:
 	-$(SHELL) ./mkinstalldirs $(APPDIR)/Contents/MacOS
