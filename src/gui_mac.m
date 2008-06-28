@@ -275,6 +275,7 @@ void      gui_mac_set_font_attributes(GuiFont font);
 void      gui_mac_create_atsui_style();
 void      gui_mac_dispose_atsui_style();
 ATSUStyle gui_mac_atsui_style_from_width(int width);
+void      gui_mac_atsui_style_set_value(ATSUStyle style, ATSUAttributeTag tag, void *value, int size);
 void      gui_mac_atsui_style_set_boolean(ATSUStyle layout, ATSUAttributeTag tag, Boolean value);
 void      gui_mac_atsui_style_set_int(ATSUStyle style, ATSUAttributeTag tag, UInt32 value);
 
@@ -657,6 +658,15 @@ int gui_mch_init_font(char_u *font_name, int fontset)
     /* in 72 DPI, 1 point = 1 pixel */
     gui.char_ascent = roundf([mac_font ascender]);
     gui.char_width  = roundf(advance.width);
+
+    float height = [mac_font ascender] - [mac_font descender] + [mac_font leading];
+
+    NSLog(@"[%s] height1 = %g - %g + %g = %g\n",
+          font_name, [mac_font ascender],
+          [mac_font descender], [mac_font leading], height);
+    NSLog(@"[%s] height2 = %g\n", font_name,
+          [mac_font defaultLineHeightForFont]);
+
     gui.char_height = roundf([mac_font defaultLineHeightForFont]) + p_linespace;
 
     [gui_mac.current_window setResizeIncrements: NSMakeSize(gui.char_width, gui.char_height)];
@@ -1555,7 +1565,13 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         gui_mac_atsui_style_set_boolean(style, kATSUQDBoldfaceTag, true);
 
     if (flags & DRAW_ITALIC)
-        gui_mac_atsui_style_set_boolean(style, kATSUQDItalicTag, true);
+    {
+        CGAffineTransform theTransform = CGAffineTransformMakeScale(1.0, -1.0);
+        theTransform.c = Fix2X(kATSItalicQDSkew);
+
+        gui_mac_atsui_style_set_value(style, kATSUFontMatrixTag,
+                                      (void *) &theTransform, sizeof(CGAffineTransform));
+    }
 
     gui_mac_atsui_style_set_int(style, kATSUStyleRenderingOptionsTag,
                                 p_antialias ? kATSStyleApplyAntiAliasing
@@ -1667,7 +1683,15 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         gui_mac_atsui_style_set_boolean(style, kATSUQDBoldfaceTag, false);
 
     if (flags & DRAW_ITALIC)
-        gui_mac_atsui_style_set_boolean(style, kATSUQDItalicTag, false);
+    {
+        // Reset the matrix
+        CGAffineTransform theTransform = CGAffineTransformMakeScale(1.0, -1.0);
+        theTransform.c = Fix2X(kATSItalicQDSkew);
+
+        gui_mac_atsui_style_set_value(style, kATSUFontMatrixTag,
+                                     (void *) &theTransform, sizeof(CGAffineTransform));
+        // gui_mac_atsui_style_set_boolean(style, kATSUQDItalicTag, false);
+    }
 }
 
 /* Drawing related }}} */
@@ -3105,11 +3129,11 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
             got_int = TRUE;
         }
 
-        // gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
-        //             original_char, modified_char);
+        gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
+                    original_char, modified_char);
 
         vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
-        // gui_mac_msg(MSG_DEBUG, @"vim_key_char: %d", vim_key_char);
+        gui_mac_msg(MSG_DEBUG, @"vim_key_char: %d", vim_key_char);
 
         switch (vim_modifiers)
         {
@@ -3129,7 +3153,13 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         }
 
         /* if it's normal key, not special one, then Shift is already applied */
-        if (vim_key_char == 0)
+        if (vim_key_char == 0 ||
+            ! (vim_key_char == ' '  ||
+               vim_key_char == 0xa0 ||
+               (vim_modifiers & MOD_MASK_CMD) ||
+               vim_key_char == 0x9  ||
+               vim_key_char == 0xd  ||
+               vim_key_char == ESC))
             vim_modifiers &= ~MOD_MASK_SHIFT;
 
         if (vim_modifiers)
@@ -3154,7 +3184,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                                   K_SECOND(vim_key_char),
                                   K_THIRD(vim_key_char));
 
-            // gui_mac_msg(MSG_DEBUG, @"IS_SPECIAL, add_to_input_buf: %d", len);
+            gui_mac_msg(MSG_DEBUG, @"IS_SPECIAL, add_to_input_buf: %d", len);
         }
 
         /* now here are normal characters */
@@ -3464,6 +3494,16 @@ void gui_mac_set_font_attributes(GuiFont vim_font)
             gui_mac.font_style[i] = NULL;
         }
     }
+}
+
+void gui_mac_atsui_style_set_value(ATSUStyle style, ATSUAttributeTag tag, void *value, int size)
+{
+    ATSUAttributeTag attribTags[1];
+    ByteCount attribSizes[] = { size };
+    ATSUAttributeValuePtr attribValues[] = { value };
+
+    attribTags[0] = tag;
+    ATSUSetAttributes(style, 1, attribTags, attribSizes, attribValues);
 }
 
 void gui_mac_atsui_style_set_boolean(ATSUStyle style, ATSUAttributeTag tag, Boolean value)
