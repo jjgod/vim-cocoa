@@ -72,7 +72,7 @@ static struct
     { '\t',     '\t'    },  /* tab */
     { '\r',     '\r'    },  /* return */
     { '\003',   '\003'  },  /* enter */
-    { '\031',   '\031'  },  /* backtab */
+    { '\031',   K_S_TAB },  /* backtab */
     { '\033',   '\033'  },  /* escape */
     { '\177',   K_BS    },  /* backspace */
 
@@ -661,11 +661,13 @@ int gui_mch_init_font(char_u *font_name, int fontset)
 
     float height = [mac_font ascender] - [mac_font descender] + [mac_font leading];
 
+#if 0
     NSLog(@"[%s] height1 = %g - %g + %g = %g\n",
           font_name, [mac_font ascender],
           [mac_font descender], [mac_font leading], height);
     NSLog(@"[%s] height2 = %g\n", font_name,
           [mac_font defaultLineHeightForFont]);
+#endif
 
     gui.char_height = roundf([mac_font defaultLineHeightForFont]) + p_linespace;
 
@@ -3129,11 +3131,11 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
             got_int = TRUE;
         }
 
-        gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
-                    original_char, modified_char);
+        // gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
+        //            original_char, modified_char);
 
         vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
-        gui_mac_msg(MSG_DEBUG, @"vim_key_char: %d", vim_key_char);
+        // gui_mac_msg(MSG_DEBUG, @"vim_key_char: %d", vim_key_char);
 
         switch (vim_modifiers)
         {
@@ -3184,7 +3186,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                                   K_SECOND(vim_key_char),
                                   K_THIRD(vim_key_char));
 
-            gui_mac_msg(MSG_DEBUG, @"IS_SPECIAL, add_to_input_buf: %d", len);
+            // gui_mac_msg(MSG_DEBUG, @"IS_SPECIAL, add_to_input_buf: %d", len);
         }
 
         /* now here are normal characters */
