@@ -1688,7 +1688,6 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     {
         // Reset the matrix
         CGAffineTransform theTransform = CGAffineTransformMakeScale(1.0, -1.0);
-        theTransform.c = Fix2X(kATSItalicQDSkew);
 
         gui_mac_atsui_style_set_value(style, kATSUFontMatrixTag,
                                      (void *) &theTransform, sizeof(CGAffineTransform));
