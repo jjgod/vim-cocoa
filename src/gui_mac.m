@@ -118,6 +118,7 @@ static struct
     NSMutableDictionary *markedTextAttributes;
 
     NSImage             *contentImage;
+    NSString            *lastSetTitle;
 }
 
 - (NSAttributedString *) markedText;
@@ -447,6 +448,10 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
             [currentView setFrame: viewRect];
 
         [currentView synchronizeContentImage];
+
+        if ([currentView inLiveResize])
+            [gui_mac.current_window setTitle:
+                [NSString stringWithFormat: @"%d×%d", gui.num_cols, gui.num_rows]];
     }
 }
 
@@ -2657,11 +2662,27 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     }
 }
 
+- (void) viewWillStartLiveResize
+{
+    lastSetTitle = [[gui_mac.current_window title] retain];
+    [super viewWillStartLiveResize];
+}
+
+- (void) viewDidEndLiveResize
+{
+    [gui_mac.current_window setTitle: lastSetTitle];
+    [lastSetTitle release];
+    lastSetTitle = nil;
+
+    [super viewDidEndLiveResize];
+}
+
 - (void) dealloc
 {
     [markedTextAttributes release];
     [markedText release];
     [contentImage release];
+    [lastSetTitle release];
 
     [super dealloc];
 }
