@@ -451,7 +451,7 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
 
         if ([currentView inLiveResize])
             [gui_mac.current_window setTitle:
-                [NSString stringWithFormat: @"%d×%d", gui.num_cols, gui.num_rows]];
+                [NSString stringWithFormat: @"VIM - %d×%d", gui.num_cols, gui.num_rows]];
     }
 }
 
@@ -872,15 +872,16 @@ NSMenuItem *gui_mac_insert_menu_item(vimmenu_T *menu)
     vimmenu_T  *parent, *brother;
     NSMenu     *parent_menu = nil;
     NSMenuItem *mac_menu_item, *item;
-    int         alloc = 0, index;
+    int         alloc = 0, index, len;
 
     brother = menu->next;
     /* My brother could be the PopUp, find my real brother */
     while ((brother != NULL) && (! menu_is_menubar(brother->name)))
         brother = brother->next;
 
-    if (STRNCMP(menu->dname, "-SEP", 4) == 0 ||
-        STRNCMP(menu->dname, "-sep", 4) == 0)
+    len = STRLEN(menu->dname);
+    // A menu separator must starts with a '-' and ends with a '-'
+    if (len > 2 && menu->dname[0] == '-' && menu->dname[len - 1] == '-')
         mac_menu_item = [NSMenuItem separatorItem];
     else
     {
