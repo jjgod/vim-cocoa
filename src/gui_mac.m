@@ -28,7 +28,7 @@
 /* Internal Data Structures {{{ */
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_4
-typedef NSInteger long
+typedef long NSInteger;
 #endif
 
 /* Key mapping {{{2 */
