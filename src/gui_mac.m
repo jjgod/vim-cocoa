@@ -2122,6 +2122,16 @@ void gui_mac_send_dummy_event()
     [NSApp postEvent: event atStart: YES];
 }
 
+unsigned int has_fname(char_u *fname)
+{
+    int i;
+
+    for (i = 0; i < global_alist.al_ga.ga_len; i++)
+        if (STRCMP(AARGLIST(&global_alist)[i].ae_fname, fname) == 0)
+            return 1;
+    return 0;
+}
+
 @implementation VimAppController
 
 - (void) application:(NSApplication *)sender openFiles:(NSArray *)filenames
@@ -2150,8 +2160,11 @@ void gui_mac_send_dummy_event()
         char_u *p;
 
         /* these are the initial files dropped on the Vim icon */
-        for (i = 0 ; i < count; i++)
+        for (i = 0; i < count; i++)
         {
+            if (has_fname(fnames[i]))
+                continue;
+
             if (ga_grow(&global_alist.al_ga, 1) == FAIL ||
                 (p = vim_strsave(fnames[i])) == NULL)
                 mch_exit(2);
