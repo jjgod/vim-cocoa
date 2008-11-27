@@ -29,6 +29,9 @@
 typedef int UniChar;
 typedef int *TECObjectRef;
 typedef int CFStringRef;
+# else
+typedef unsigned short UniChar;
+#include <CoreServices/CoreServices.h>
 # endif
 
 static char_u	    *mac_utf16_to_utf8 __ARGS((UniChar *from, size_t fromLen, size_t *actualLen));
