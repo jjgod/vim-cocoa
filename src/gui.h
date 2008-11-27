@@ -34,6 +34,7 @@
 #endif
 
 #ifdef FEAT_GUI_MAC
+#ifndef FEAT_GUI_COCOA
 # include <Types.h>
 /*# include <Memory.h>*/
 # include <Quickdraw.h>
@@ -50,6 +51,7 @@
 /*
 # include <ToolUtils.h>
 # include <SegLoad.h>*/
+#endif
 #endif
 
 #ifdef FEAT_GUI_PHOTON
@@ -438,11 +440,13 @@ typedef struct Gui
 #endif
 
 #ifdef FEAT_GUI_MAC
+#ifndef FEAT_GUI_COCOA
     WindowPtr	VimWindow;
     MenuHandle	MacOSHelpMenu;	    /* Help menu provided by the MacOS */
     int		MacOSHelpItems;	    /* Nr of help-items supplied by MacOS */
     WindowPtr	wid;		    /* Window id of text area */
     int		visibility;	    /* Is window partially/fully obscured? */
+#endif
 #endif
 
 #ifdef FEAT_GUI_PHOTON
