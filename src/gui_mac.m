@@ -1036,6 +1036,9 @@ void gui_mch_show_popupmenu(vimmenu_T *menu)
     NSMenu *mac_menu = (NSMenu *) menu->menu_handle;
     NSEvent *event = gui_mac.last_mouse_down_event;
 
+    gui_update_cursor(TRUE, TRUE);
+    gui_mac_redraw();
+
     [NSMenu popUpContextMenu: mac_menu
                    withEvent: event
                      forView: currentView];
