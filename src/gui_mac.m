@@ -101,6 +101,7 @@ static struct
 
 #define FF_Y(row)               (gui_mac.main_height - FILL_Y(row))
 #define FT_Y(row)               (gui_mac.main_height - TEXT_Y(row))
+#define VIM_BG_ALPHA            ((100 - p_transp) / 100.0)
 
 /* A simple view to make setting text area, scrollbar position inside
  * vim window easier */
@@ -140,6 +141,7 @@ static struct
 
 @interface NSWindow (Private)
 - (void) setBottomCornerRounded: (bool) rounded;
+- (void) _setContentHasShadow: (BOOL) has;
 @end
 
 @interface VIMWindow: NSWindow {
@@ -199,7 +201,6 @@ struct gui_mac_data {
 
     int         app_is_running;
     CGFloat     main_height;
-    float       bg_alpha;
 
     int         blink_state;
     long        blink_wait;
@@ -337,8 +338,6 @@ int gui_mch_init()
 #endif
     gui.scrollbar_height = gui.scrollbar_width = [VIMScroller scrollerWidth];
     gui.border_offset = gui.border_width = 2;
-
-    gui_mac.bg_alpha = 1.0;
 
     gui_mac.current_window = nil;
     gui_mac.input_received = NO;
@@ -807,6 +806,9 @@ int gui_mch_adjust_charheight()
         [self setTitle: @"gVIM on Macintosh"];
         [self setResizeIncrements: NSMakeSize(gui.char_width, gui.char_height)];
         [self setDelegate: gui_mac.app_delegate];
+
+        [self _setContentHasShadow: NO];
+        [self setOpaque: NO];
 
         textView = nil;
 
@@ -1426,7 +1428,7 @@ void gui_mch_set_fg_color(guicolor_T color)
 
 void gui_mch_set_bg_color(guicolor_T color)
 {
-    gui_mac.bg_color = NSColorFromGuiColor(color, gui_mac.bg_alpha);
+    gui_mac.bg_color = NSColorFromGuiColor(color, VIM_BG_ALPHA);
 
     // TODO: should set for all views
     [currentView setMarkedTextAttribute: gui_mac.bg_color
@@ -2953,7 +2955,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         NSString *size_desc;
         NSDictionary *attrib;
 
-        [NSColorFromGuiColor(gui.back_pixel, gui_mac.bg_alpha) set];
+        [NSColorFromGuiColor(gui.back_pixel, VIM_BG_ALPHA) set];
         [NSBezierPath fillRect: rect];
 
         font = [NSFont boldSystemFontOfSize: 48.0];
