@@ -89,6 +89,7 @@ static struct
 #define VIM_DEFAULT_FONT_NAME   (char_u *) "Monaco:h12"
 #define VIM_MAX_CHAR_WIDTH      2
 
+#define GUI_MAC_DELAY_OPEN          1
 #define VIM_UNDERLINE_OFFSET        0
 #define VIM_UNDERLINE_HEIGHT        1
 #define VIM_UNDERCURL_HEIGHT        2
@@ -218,6 +219,7 @@ struct gui_mac_data {
     int         debug_level;
     BOOL        showing_tabline;
     BOOL        selecting_tab;
+    BOOL        window_opened;
 
     CGSize      single_advances[VIM_MAX_COL_LEN];
     CGSize      double_advances[VIM_MAX_COL_LEN];
@@ -343,6 +345,7 @@ int gui_mch_init()
     gui_mac.initialized    = NO;
     gui_mac.showing_tabline = NO;
     gui_mac.selecting_tab  = NO;
+    gui_mac.window_opened  = NO;
 
     return OK;
 }
@@ -376,11 +379,13 @@ int gui_mch_open()
 {
     gui_mac_msg(MSG_INFO, @"gui_mch_open: %d %d", gui_win_x, gui_win_y);
 
+#if GUI_MAC_DELAY_OPEN
+#else
     gui_mac_open_window();
 
     if (gui_win_x != -1 && gui_win_y != -1)
         gui_mch_set_winpos(gui_win_x, gui_win_y);
-
+#endif
     return OK;
 }
 
@@ -1470,6 +1475,10 @@ void gui_mch_flash(int msec)
 void gui_mch_clear_all()
 {
     [currentView clearAll];
+#if GUI_MAC_DELAY_OPEN
+    if (! gui_mac.window_opened)
+        gui_mac_open_window();
+#endif
 }
 
 void gui_mch_clear_block(int row1, int col1, int row2, int col2)
@@ -2568,6 +2577,7 @@ void gui_mac_open_window()
         [window setFrameTopLeftPoint: topLeft];
 
     [window makeKeyAndOrderFront: nil];
+    gui_mac.window_opened = YES;
 }
 
 /* Window related Utilities 2}}} */
