@@ -82,13 +82,14 @@ static struct
 
 /* 2}}} */
 
+#define VIM_MAX_COL_LEN         1024
 #define VIM_MAX_FONT_NAME_LEN   256
 #define VIM_MAX_BUTTON_TITLE    256
 #define VIM_DEFAULT_FONT_SIZE   9
 #define VIM_DEFAULT_FONT_NAME   (char_u *) "Monaco:h12"
 #define VIM_MAX_CHAR_WIDTH      2
 
-#define VIM_UNDERLINE_OFFSET        (-2)
+#define VIM_UNDERLINE_OFFSET        0
 #define VIM_UNDERLINE_HEIGHT        1
 #define VIM_UNDERCURL_HEIGHT        2
 #define VIM_UNDERCURL_OFFSET        (-2)
@@ -131,6 +132,10 @@ static struct
 
 - (void) clearAll;
 
+@end
+
+@interface NSWindow (Private)
+- (void) setBottomCornerRounded: (bool) rounded;
 @end
 
 @interface VIMWindow: NSWindow {
@@ -189,6 +194,7 @@ struct gui_mac_data {
     NSFont     *selected_font;
 
     int         app_is_running;
+    CGFloat     main_height;
     float       bg_alpha;
 
     int         blink_state;
@@ -210,7 +216,8 @@ struct gui_mac_data {
     BOOL        showing_tabline;
     BOOL        selecting_tab;
 
-    ATSUStyle   font_style[VIM_MAX_CHAR_WIDTH];
+    CGSize      single_advances[VIM_MAX_COL_LEN];
+    CGSize      double_advances[VIM_MAX_COL_LEN];
 
     VimAppController  *app_delegate;
     NSAutoreleasePool *app_pool;
@@ -246,6 +253,7 @@ NSAlertStyle NSAlertStyleFromVim(int type);
 #define      NSStringFromVim(str)    ([NSString stringWithUTF8String: (const char *) str])
 NSRect       NSRectFromVim(int row1, int col1, int row2, int col2);
 
+GuiFont gui_mac_create_related_font(GuiFont font, bool italic, bool bold);
 NSWindow *gui_mac_get_window(NSRect rect);
 int       gui_mac_create_window(NSRect rect);
 void      gui_mac_open_window();
@@ -272,13 +280,6 @@ int          gui_mac_mouse_button_to_vim(int mac_button);
 GuiFont   gui_mac_find_font(char_u *font_name);
 int       gui_mac_points_to_pixels(char_u *str, char_u **end);
 NSFont   *gui_mac_get_font(char_u *font_name, int size);
-void      gui_mac_set_font_attributes(GuiFont font);
-void      gui_mac_create_atsui_style();
-void      gui_mac_dispose_atsui_style();
-ATSUStyle gui_mac_atsui_style_from_width(int width);
-void      gui_mac_atsui_style_set_value(ATSUStyle style, ATSUAttributeTag tag, void *value, int size);
-void      gui_mac_atsui_style_set_boolean(ATSUStyle layout, ATSUAttributeTag tag, Boolean value);
-void      gui_mac_atsui_style_set_int(ATSUStyle style, ATSUAttributeTag tag, UInt32 value);
 
 int gui_mac_select_from_font_panel(char_u *font_name);
 void gui_mac_update_scrollbar(scrollbar_T *sb);
@@ -606,11 +607,11 @@ int gui_mch_init_font(char_u *font_name, int fontset)
 {
     NSAutoreleasePool *pool;
     NSFont  *mac_font;
+    CTFontRef ctFont;
     GuiFont  vim_font;
+    int      i;
     NSSize   advance;
     char_u   used_font_name[VIM_MAX_FONT_NAME_LEN];
-
-    gui_mac_create_atsui_style();
 
     if (font_name == NULL)
         font_name = VIM_DEFAULT_FONT_NAME;
@@ -650,7 +651,11 @@ int gui_mch_init_font(char_u *font_name, int fontset)
     }
 
     gui.norm_font = vim_font;
+    gui.ital_font = gui_mac_create_related_font(vim_font, true,  false);
+    gui.bold_font = gui_mac_create_related_font(vim_font, false, true);
+    gui.boldital_font = gui_mac_create_related_font(vim_font, true, true);
 
+    // NSLog(@"i(%@), b(%@), ib(%@)", gui.ital_font, gui.bold_font, gui.boldital_font);
     vim_strncpy(used_font_name, font_name, sizeof(used_font_name) - 1);
 
     gui_mac_msg(MSG_INFO, @"gui_mch_init_font: font_name: '%s'", font_name);
@@ -658,32 +663,34 @@ int gui_mch_init_font(char_u *font_name, int fontset)
     hl_set_font_name(used_font_name);
 
     mac_font = (NSFont *) vim_font;
+    ctFont   = (CTFontRef) mac_font;
     advance  = [mac_font advancementForGlyph: (NSGlyph) '_'];
 
     /* in 72 DPI, 1 point = 1 pixel */
-    gui.char_ascent = roundf([mac_font ascender]);
+    gui.char_ascent = roundf(CTFontGetAscent(ctFont));
     gui.char_width  = roundf(advance.width);
 
-    float height = [mac_font ascender] - [mac_font descender] + [mac_font leading];
+    // Initialize advances array, it's a pre-mature optimization, evil
+    for (i = 0; i < VIM_MAX_COL_LEN; i++)
+    {
+        gui_mac.single_advances[i] = CGSizeMake(gui.char_width, 0);
+        gui_mac.double_advances[i] = CGSizeMake(gui.char_width * 2, 0);
+    }
 
-#if 0
-    NSLog(@"[%s] height1 = %g - %g + %g = %g\n",
-          font_name, [mac_font ascender],
-          [mac_font descender], [mac_font leading], height);
-    NSLog(@"[%s] height2 = %g\n", font_name,
-          [mac_font defaultLineHeightForFont]);
-#endif
-
-    gui.char_height = roundf([mac_font defaultLineHeightForFont]) + p_linespace;
+    float height = CTFontGetAscent(ctFont) +
+                   CTFontGetDescent(ctFont) +
+                   CTFontGetLeading(ctFont);
+    gui.char_height = roundf(height) + p_linespace;
 
     [gui_mac.current_window setResizeIncrements: NSMakeSize(gui.char_width, gui.char_height)];
 
+#if 0
     gui_mac_msg(MSG_INFO, @"ascent = %d, width = %d, height = %d, %f, %f",
                 gui.char_ascent, gui.char_width, gui.char_height,
                 [mac_font ascender], [mac_font descender]);
+#endif
     [pool release];
 
-    gui_mac_set_font_attributes(vim_font);
     return OK;
 }
 
@@ -1414,10 +1421,7 @@ void gui_mch_invert_rectangle(int r, int c, int nr, int nc)
 
     gui_mac_begin_drawing();
 
-    rect = NSMakeRect(FILL_X(c),
-                      FILL_Y(r),
-                      FILL_X(nc),
-                      FILL_Y(nr));
+    rect = NSRectFromVim(r, c, r + nr, c + nc);
 
     CGContextRef context = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
     CGContextSaveGState (context);
@@ -1442,13 +1446,16 @@ void gui_mch_clear_block(int row1, int col1, int row2, int col2)
 {
     NSRect rect;
 
+    // NSLog(@"clearBlock: (%d, %d) - (%d, %d)", row1, col1, row2, col2);
+
     gui_mch_set_bg_color(gui.back_pixel);
 
     gui_mac_begin_drawing();
 
-    [gui_mac.bg_color set];
     rect = NSRectFromVim(row1, col1, row2, col2);
+    // NSShowRect("clearBlock", rect);
 
+    [gui_mac.bg_color set];
     NSRectFill(rect);
 
     gui_mac_end_drawing();
@@ -1458,11 +1465,13 @@ void gui_mch_delete_lines(int row, int num_lines)
 {
     NSRect src_rect;
 
+    // NSLog(@"deleteLines: (%d, %d)", row, num_lines);
     src_rect = NSRectFromVim(row + num_lines,            // row1
                              gui.scroll_region_left,     // col1
                              gui.scroll_region_bot,      // row2
                              gui.scroll_region_right);   // col2
 
+    // NSShowRect("src_rect", src_rect);
     // move src_dest up for numlines
     gui_mac_scroll_rect(src_rect, -num_lines);
 
@@ -1476,6 +1485,7 @@ void gui_mch_insert_lines(int row, int num_lines)
 {
     NSRect src_rect;
 
+    // NSLog(@"insertLines: (%d, %d)", row, num_lines);
     src_rect = NSRectFromVim(row,                               // row1
                              gui.scroll_region_left,            // col1
                              gui.scroll_region_bot - num_lines, // row2
@@ -1518,7 +1528,7 @@ void gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
     left = FILL_X(gui.col);
 
     rect = NSMakeRect(left,
-                      FILL_Y(gui.row) + gui.char_height - h,
+                      gui_mac.main_height - (FILL_Y(gui.row + 1) + gui.char_height - h),
                       w, h);
 
     gui_mac_begin_drawing();
@@ -1550,75 +1560,48 @@ void print_draw_flags(int flags)
         fprintf(stderr, "\n");
 }
 
+void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line,
+                          NSPoint origin, int row);
+
 void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 {
-    NSRect       rect;
-    UniChar     *text;
-    int          n;
-    int          width_in_cell, last_width_in_cell = 1;
+    // gui_mac_msg(MSG_DEBUG, @"gui_mch_draw_string: %d, %d, %d", row, col, len);
+    CTLineRef               line;
+    CFStringRef             string;
+    CFDictionaryRef         attributes;
+    CFAttributedStringRef   attrString;
+    CTFontRef               font = (CTFontRef) gui_mac.current_font;
 
-    // gui_mac_msg(MSG_DEBUG, "gui_mch_draw_string: %d, %d, %d", row, col, len);
+    CFStringRef keys[] = { kCTFontAttributeName, kCTForegroundColorAttributeName };
+    CFTypeRef values[] = { font,                 gui_mac.fg_color };
 
-    ATSUStyle          style = gui_mac.font_style[0];
-    ATSUTextLayout     layout;
-    UniCharArrayOffset offset = 0;
-    UniCharCount       length, yet_to_draw = 0;
+    // Create a CFString from the original UTF-8 string 's'
+    string = CFStringCreateWithBytes(kCFAllocatorDefault,
+                                     s, len,
+                                     kCFStringEncodingUTF8,
+                                     false);
 
-    ATSUCreateTextLayout(&layout);
+    // Create the attribute for Core Text layout
+    attributes = CFDictionaryCreate(kCFAllocatorDefault,
+                                    (const void **) &keys,
+                                    (const void **) &values,
+                                    sizeof(keys) / sizeof(keys[0]),
+                                    &kCFTypeDictionaryKeyCallBacks,
+                                    &kCFTypeDictionaryValueCallBacks);
 
-    text = mac_enc_to_utf16(s, len, (size_t *) &length);
-    length /= sizeof(UniChar);
+    attrString = CFAttributedStringCreate(kCFAllocatorDefault,
+                                          string,
+                                          attributes);
+    CFRelease(string);
+    CFRelease(attributes);
 
-    if (flags & DRAW_BOLD)
-        gui_mac_atsui_style_set_boolean(style, kATSUQDBoldfaceTag, true);
+    line = CTLineCreateWithAttributedString(attrString);
+    if (! line)
+        return;
 
-    if (flags & DRAW_ITALIC)
-    {
-        CGAffineTransform theTransform = CGAffineTransformMakeScale(1.0, -1.0);
-        theTransform.c = Fix2X(kATSItalicQDSkew);
-
-        gui_mac_atsui_style_set_value(style, kATSUFontMatrixTag,
-                                      (void *) &theTransform, sizeof(CGAffineTransform));
-    }
-
-    gui_mac_atsui_style_set_int(style, kATSUStyleRenderingOptionsTag,
-                                p_antialias ? kATSStyleApplyAntiAliasing
-                                            : kATSStyleNoAntiAliasing);
-
-    ATSUSetTextPointerLocation(layout, text,
-                               kATSUFromTextBeginning, kATSUToTextEnd,
-                               length);
-
-    /* Compute the length in display cells. */
-    for (n = 0; n < len; n += MB_BYTE2LEN(s[n]))
-    {
-        width_in_cell = (*mb_ptr2cells)(s + n);
-
-        /* probably we are switching from single byte character
-         * to multibyte characters (which requires more than one
-         * cell to draw) */
-        if (width_in_cell != last_width_in_cell)
-        {
-            style = gui_mac_atsui_style_from_width(last_width_in_cell);
-
-            ATSUSetRunStyle(layout, style, offset, yet_to_draw);
-            offset += yet_to_draw;
-            yet_to_draw = 0;
-            last_width_in_cell = width_in_cell;
-        }
-
-        yet_to_draw++;
-    }
-
-    if (yet_to_draw)
-    {
-        style = gui_mac_atsui_style_from_width(width_in_cell);
-        ATSUSetRunStyle(layout, style, offset, kATSUToTextEnd);
-    }
-
-    rect = NSMakeRect(FILL_X(col), FILL_Y(row),
-                      gui.char_width * len,
-                      gui.char_height);
+    NSRect rect = NSMakeRect(FILL_X(col),
+                             gui_mac.main_height - FILL_Y(row + 1),
+                             gui.char_width * len, gui.char_height);
     if (has_mbyte)
     {
         int cell_len = 0;
@@ -1634,11 +1617,11 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     gui_mac_begin_drawing();
 
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    CGAffineTransform transform = CGAffineTransformIdentity;
+    transform.c = (flags & DRAW_ITALIC) ? Fix2X(kATSItalicQDSkew) : 0.0;
 
-    ATSUAttributeTag tags[] = { kATSUCGContextTag };
-    ByteCount sizes[] = { sizeof(CGContextRef) };
-    ATSUAttributeValuePtr values[] = { &context };
-    ATSUSetLayoutControls(layout, 1, tags, sizes, values);
+    CGContextSetTextMatrix(context, transform);
+    CGContextSetAllowsAntialiasing(context, p_antialias);
 
     if (! (flags & DRAW_TRANSP))
     {
@@ -1646,19 +1629,23 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         NSRectFill(rect);
     }
 
-    [gui_mac.fg_color set];
+    CGContextSetRGBFillColor(context,
+                             [gui_mac.fg_color redComponent],
+                             [gui_mac.fg_color greenComponent],
+                             [gui_mac.fg_color blueComponent],
+                             1.0);
 
-    ATSUSetTransientFontMatching(layout, TRUE);
-    ATSUDrawText(layout,
-                 kATSUFromTextBeginning,
-                 kATSUToTextEnd,
-                 X2Fix(rect.origin.x),
-                 X2Fix(TEXT_Y(row)));
+    NSPoint textOrigin = NSMakePoint(rect.origin.x,
+                                     rect.origin.y + CTFontGetDescent(font));
+    CGContextSetTextPosition(context, textOrigin.x, textOrigin.y);
+
+    gui_mac_draw_ct_line(context, line, textOrigin, row);
 
     if (flags & DRAW_UNDERL)
     {
         [gui_mac.sp_color set];
-        NSRectFill(NSMakeRect(rect.origin.x, FILL_Y(row + 1) + VIM_UNDERLINE_OFFSET,
+        NSRectFill(NSMakeRect(rect.origin.x,
+                              rect.origin.y + VIM_UNDERLINE_OFFSET,
                               rect.size.width, VIM_UNDERLINE_HEIGHT));
     }
 
@@ -1669,8 +1656,9 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         float line_end_x = rect.origin.x + rect.size.width;
         int i = 0;
         NSRect line_rect = NSMakeRect(rect.origin.x,
-                                      FILL_Y(row + 1) + VIM_UNDERCURL_OFFSET,
-                                      VIM_UNDERCURL_DOT_WIDTH, VIM_UNDERCURL_HEIGHT);
+                                      rect.origin.y,
+                                      VIM_UNDERCURL_DOT_WIDTH,
+                                      VIM_UNDERCURL_HEIGHT);
 
         while (line_rect.origin.x < line_end_x)
         {
@@ -1684,20 +1672,44 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 
     gui_mac_end_drawing();
 
-    vim_free(text);
-    ATSUDisposeTextLayout(layout);
+    CFRelease(line);
+}
 
-    if (flags & DRAW_BOLD)
-        gui_mac_atsui_style_set_boolean(style, kATSUQDBoldfaceTag, false);
+void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line, NSPoint origin, int row)
+{
+    CFArrayRef runArray = CTLineGetGlyphRuns(line);
+    CFIndex runCount = CFArrayGetCount(runArray);
+    CFIndex i, glyphOffset;
+    CGFloat x;
 
-    if (flags & DRAW_ITALIC)
+    for (i = 0, x = origin.x, glyphOffset = 0; i < runCount; i++)
     {
-        // Reset the matrix
-        CGAffineTransform theTransform = CGAffineTransformMakeScale(1.0, -1.0);
+        CTRunRef             run = (CTRunRef) CFArrayGetValueAtIndex(runArray, i);
+        CFDictionaryRef attrDict = CTRunGetAttributes(run);
+        CTFontRef        runFont = (CTFontRef) CFDictionaryGetValue(attrDict,
+                                                                    kCTFontAttributeName);
+        bool            isDouble = (runFont != (CTFontRef) gui_mac.current_font);
+        CFIndex              len = CTRunGetGlyphCount(run);
+        CGFloat          advance = len * gui.char_width;
+        if (isDouble)
+            advance *= 2;
 
-        gui_mac_atsui_style_set_value(style, kATSUFontMatrixTag,
-                                     (void *) &theTransform, sizeof(CGAffineTransform));
-        // gui_mac_atsui_style_set_boolean(style, kATSUQDItalicTag, false);
+        CGContextSetTextPosition(context, x, origin.y);
+
+        // NSLog(@"r%d, %d, %g, (%g, %g), run[%d] len = %d, font = %@",
+        //      row, isDouble, advance, x, origin.y, i, len, [runFont fontName]);
+        x += advance;
+        CGFontRef cgFont = CTFontCopyGraphicsFont(runFont, NULL);
+        CGContextSetFont(context, cgFont);
+        CGContextSetFontSize(context, CTFontGetSize(runFont));
+
+        const CGGlyph *glyphs = CTRunGetGlyphsPtr(run);
+
+        CGContextShowGlyphsWithAdvances(context, glyphs,
+                                        isDouble ? gui_mac.double_advances
+                                                 : gui_mac.single_advances,
+                                        len);
+        CFRelease(cgFont);
     }
 }
 
@@ -2079,7 +2091,7 @@ NSColor *NSColorFromGuiColor(guicolor_T color, float alpha)
 
 NSRect NSRectFromVim(int row1, int col1, int row2, int col2)
 {
-    return NSMakeRect(FILL_X(col1), FILL_Y(row1),
+    return NSMakeRect(FILL_X(col1), gui_mac.main_height - FILL_Y(row2 + 1),
                       FILL_X(col2 + 1) - FILL_X(col1),
                       FILL_Y(row2 + 1) - FILL_Y(row1));
 }
@@ -2654,8 +2666,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         if (! NSEqualRects(rect, NSZeroRect))
         {
             contentImage = [[NSImage alloc] initWithSize: rect.size];
-            [contentImage setFlipped: YES];
+            gui_mac.main_height = rect.size.height;
         }
+
         else contentImage = nil;
     }
 
@@ -2672,7 +2685,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                     size.width, size.height);
         [contentImage release];
         contentImage = [[NSImage alloc] initWithSize: size];
-        [contentImage setFlipped: YES];
+        gui_mac.main_height = size.height;
     }
 }
 
@@ -2719,7 +2732,6 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
     [gui_mac.bg_color set];
     NSRectFill([self bounds]);
-    // NSShowRect("clearAll", [self bounds]);
 
     [contentImage unlockFocus];
 }
@@ -2916,10 +2928,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     else
     {
 #endif
-        [contentImage drawInRect: rect
-                        fromRect: rect
-                       operation: NSCompositeCopy
-                        fraction: 1.0];
+        [contentImage compositeToPoint: rect.origin
+                              fromRect: rect
+                             operation: NSCompositeCopy];
 
         if ([self hasMarkedText])
         {
@@ -3252,7 +3263,7 @@ insert_text:
 void gui_mac_scroll_rect(NSRect rect, int lines)
 {
     NSPoint dest_point = rect.origin;
-    dest_point.y += lines * gui.char_height;
+    dest_point.y -= lines * gui.char_height;
 
     gui_mac_begin_drawing();
     NSCopyBits(0, rect, dest_point);
@@ -3451,115 +3462,16 @@ int gui_mac_points_to_pixels(char_u *str, char_u **end)
     return pixels;
 }
 
-void gui_mac_create_atsui_style()
+GuiFont gui_mac_create_related_font(GuiFont font, bool italic, bool bold)
 {
-    int i;
+    CTFontSymbolicTraits traitMask;
 
-    for (i = 0; i < VIM_MAX_CHAR_WIDTH; i++)
-        if (gui_mac.font_style[i] == NULL)
-        {
-            if (ATSUCreateStyle(&(gui_mac.font_style[i])) != noErr)
-                gui_mac.font_style[i] = NULL;
-        }
-}
+    traitMask  = italic ? kCTFontItalicTrait : 0;
+    traitMask |= bold   ? kCTFontBoldTrait   : 0;
 
-void gui_mac_dispose_atsui_style()
-{
-    int i;
-
-    for (i = 0; i < VIM_MAX_CHAR_WIDTH; i++)
-        if (gui_mac.font_style[i] == NULL)
-        {
-            if (ATSUDisposeStyle(gui_mac.font_style[i]) != noErr)
-                gui_mac.font_style[i] = NULL;
-        }
-}
-
-ATSUStyle gui_mac_atsui_style_from_width(int width)
-{
-    if (width >= VIM_MAX_CHAR_WIDTH)
-        return gui_mac.font_style[VIM_MAX_CHAR_WIDTH - 1];
-
-    return gui_mac.font_style[width - 1];
-}
-
-void gui_mac_set_font_attributes(GuiFont vim_font)
-{
-    int               i;
-    NSFont           *mac_font;
-    ATSUFontID        fontID;
-    Fixed             fontSize;
-    Fixed             fontWidth;
-    CGAffineTransform transform = CGAffineTransformMakeScale(1, -1);
-    ATSStyleRenderingOptions options;
-
-    mac_font  = (NSFont *) vim_font;
-    fontID    = [mac_font _atsFontID];
-    fontSize  = Long2Fix([mac_font pointSize]);
-    fontWidth = Long2Fix(gui.char_width);
-    options   = p_antialias ? kATSStyleApplyAntiAliasing : kATSStyleNoAntiAliasing;
-
-    ATSUAttributeTag attribTags[] =
-    {
-        kATSUFontTag, kATSUSizeTag, kATSUImposeWidthTag,
-        kATSUFontMatrixTag, kATSUStyleRenderingOptionsTag,
-        kATSUMaxATSUITagValue + 1
-    };
-
-    ByteCount attribSizes[] =
-    {
-        sizeof(ATSUFontID), sizeof(Fixed), sizeof(fontWidth),
-        sizeof(CGAffineTransform), sizeof(ATSStyleRenderingOptions),
-        sizeof(vim_font)
-    };
-
-    ATSUAttributeValuePtr attribValues[] =
-    {
-        &fontID, &fontSize, &fontWidth, &transform, &options, &vim_font
-    };
-
-    for (i = 0; i < VIM_MAX_CHAR_WIDTH; i++)
-    {
-        fontWidth = Long2Fix(gui.char_width * (i + 1));
-
-        if (ATSUSetAttributes(gui_mac.font_style[i],
-                              (sizeof attribTags) / sizeof(ATSUAttributeTag),
-                              attribTags, attribSizes, attribValues) != noErr)
-        {
-            ATSUDisposeStyle(gui_mac.font_style[i]);
-            gui_mac.font_style[i] = NULL;
-        }
-    }
-}
-
-void gui_mac_atsui_style_set_value(ATSUStyle style, ATSUAttributeTag tag, void *value, int size)
-{
-    ATSUAttributeTag attribTags[1];
-    ByteCount attribSizes[] = { size };
-    ATSUAttributeValuePtr attribValues[] = { value };
-
-    attribTags[0] = tag;
-    ATSUSetAttributes(style, 1, attribTags, attribSizes, attribValues);
-}
-
-void gui_mac_atsui_style_set_boolean(ATSUStyle style, ATSUAttributeTag tag, Boolean value)
-{
-    ATSUAttributeTag attribTags[1];
-    ByteCount attribSizes[] = { sizeof(Boolean) };
-    ATSUAttributeValuePtr attribValues[] = { &value };
-
-    attribTags[0] = tag;
-    ATSUSetAttributes(style, 1, attribTags, attribSizes, attribValues);
-}
-
-void gui_mac_atsui_style_set_int(ATSUStyle style, ATSUAttributeTag tag, UInt32 value)
-{
-    ATSUAttributeTag attribTags[1];
-    ByteCount attribSizes[] = { sizeof(UInt32) };
-    ATSUAttributeValuePtr attribValues[] = { &value };
-
-    attribTags[0] = tag;
-    ATSUSetAttributes(style, 1, attribTags, attribSizes, attribValues);
+    return (GuiFont) CTFontCreateCopyWithSymbolicTraits((CTFontRef) font,
+                                                        0.0, NULL,
+                                                        traitMask, traitMask);
 }
 
 /* Font Related Utilities 2}}} */
