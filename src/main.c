@@ -2021,7 +2021,7 @@ command_line_scan(mparm_T *parmp)
 		break;
 
 	    case 'p':		/* "-p[N]" open N tab pages */
-#ifdef TARGET_API_MAC_OSX
+#ifdef FEAT_GUI_COCOA
 		/* For some reason on MacOS X, an argument like:
 		   -psn_0_10223617 is passed in when invoke from Finder
 		   or with the 'open' command */
