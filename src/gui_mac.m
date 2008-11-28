@@ -3241,13 +3241,16 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                 goto insert_text;
             break;
 
-        case MOD_MASK_CTRL:
-            result[len++] = modified_char;
-            add_to_input_buf(result, len);
-            // gui_mac_msg(MSG_DEBUG, @"CTRL-%c, add_to_input_buf: %d", original_char, len);
+        default:
+            if (vim_modifiers & MOD_MASK_CTRL)
+            {
+                result[len++] = modified_char;
+                add_to_input_buf(result, len);
+                // gui_mac_msg(MSG_DEBUG, @"CTRL-%c, add_to_input_buf: %d", original_char, len);
 
-            gui_mac_stop_app(YES);
-            return;
+                gui_mac_stop_app(YES);
+                return;
+            }
         }
 
         /* if it's normal key, not special one, then Shift is already applied */
