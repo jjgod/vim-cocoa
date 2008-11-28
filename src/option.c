@@ -2698,6 +2698,13 @@ static struct vimoption options[] =
 			    (char_u *)&p_tbis, PV_NONE,
 			    {(char_u *)"small", (char_u *)0L} SCRIPTID_INIT},
 #endif
+    {"transparency",   "transp",  P_NUM|P_VIM|P_RCLR,
+#if defined(FEAT_GUI_COCOA)
+                            (char_u *)&p_transp, PV_NONE,
+#else
+                            (char_u *)NULL, PV_NONE,
+#endif
+                            {(char_u *)0L, (char_u *)0L} },
     {"ttimeout",    NULL,   P_BOOL|P_VI_DEF|P_VIM,
 			    (char_u *)&p_ttimeout, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
@@ -8776,6 +8783,19 @@ set_num_option(
 # endif
 #endif
     }
+#if defined(FEAT_GUI_COCOA)
+     /* 'transparency' is a number between 0 and 100 */
+    else if (pp == &p_transp)
+    {
+        if (p_transp < 0 || p_transp > 100)
+        {
+            errmsg = e_invarg;
+            p_transp = old_value;
+        }
+        else if (gui.in_use)
+            gui_mch_new_colors();
+    }
+#endif
 
     /*
      * Check the bounds for numeric options here
