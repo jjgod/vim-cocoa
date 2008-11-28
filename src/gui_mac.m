@@ -98,6 +98,9 @@ static struct
 
 #define VIMDropFilesEventSubtype    10001
 
+#define FF_Y(row)               (gui_mac.main_height - FILL_Y(row))
+#define FT_Y(row)               (gui_mac.main_height - TEXT_Y(row))
+
 /* A simple view to make setting text area, scrollbar position inside
  * vim window easier */
 @interface VIMContentView: NSView {
@@ -677,9 +680,32 @@ int gui_mch_init_font(char_u *font_name, int fontset)
         gui_mac.double_advances[i] = CGSizeMake(gui.char_width * 2, 0);
     }
 
+    /* Character placement in a line:
+     *
+     * +-----------------------+ <- top
+     * | p_linespace
+     * +--------------
+     * | Ascent
+     * +---------------- <- origin.y
+     * | Descent
+     * +------------------
+     * | Leading
+     * +------------------------+ <- bottom
+     *
+     * The real situation is a bit complicated than we thought,
+     * basically, some fonts may find the Descent + Leading not
+     * enough to put every details of their characters (i.e. the
+     * descent part of a 'g' or 'y' may exceeds the bottom line).
+     * However, we must fill the entire rectangle ranged from
+     * top to bottom. So in consequence, the rect of the next
+     * line can overwrites some of the descent part of the upper
+     * line, which is bad, but no better solutions. */
+
     float height = CTFontGetAscent(ctFont) +
                    CTFontGetDescent(ctFont) +
                    CTFontGetLeading(ctFont);
+    // NSLog(@"Ascent = %g, Descent = %g, Leading = %g",
+    //      CTFontGetAscent(ctFont), CTFontGetDescent(ctFont), CTFontGetLeading(ctFont));
     gui.char_height = roundf(height) + p_linespace;
 
     [gui_mac.current_window setResizeIncrements: NSMakeSize(gui.char_width, gui.char_height)];
@@ -736,15 +762,16 @@ char_u *gui_mch_get_fontname(GuiFont font, char_u *name)
 
 int gui_mch_adjust_charheight()
 {
-    NSFont *mac_font = gui_mac.current_font;
+    CTFontRef mac_font = (CTFontRef) gui_mac.current_font;
 
     if (mac_font == nil)
         return OK;
 
     /* in 72 DPI, 1 point = 1 pixel */
-    gui.char_ascent = roundf([mac_font ascender]);
-    gui.char_height = roundf([mac_font ascender] - [mac_font descender]) + p_linespace;
-
+    gui.char_ascent = roundf(CTFontGetAscent(mac_font));
+    gui.char_height = roundf(CTFontGetAscent(mac_font) +
+                             CTFontGetDescent(mac_font) +
+                             CTFontGetLeading(mac_font)) + p_linespace;
     return OK;
 }
 
@@ -1527,18 +1554,14 @@ void gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
 #endif
     left = FILL_X(gui.col);
 
-    rect = NSMakeRect(left,
-                      gui_mac.main_height - (FILL_Y(gui.row + 1) + gui.char_height - h),
-                      w, h);
+    rect = NSMakeRect(left, FF_Y(gui.row + 2) + h, w, h);
 
     gui_mac_begin_drawing();
-
     [NSColorFromGuiColor(color, 1.0) set];
     // gui_mac_msg(MSG_DEBUG, @"rect = %g %g %g %g",
     //      rect.origin.x, rect.origin.y,
     //      rect.size.width, rect.size.height);
     [NSBezierPath fillRect: rect];
-
     gui_mac_end_drawing();
 }
 
@@ -1599,8 +1622,7 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     if (! line)
         return;
 
-    NSRect rect = NSMakeRect(FILL_X(col),
-                             gui_mac.main_height - FILL_Y(row + 1),
+    NSRect rect = NSMakeRect(FILL_X(col), FF_Y(row + 1),
                              gui.char_width * len, gui.char_height);
     if (has_mbyte)
     {
@@ -1618,6 +1640,20 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
     CGAffineTransform transform = CGAffineTransformIdentity;
+
+    /* NOTE: Since we already set 'gui.ital_font' and 'gui.boldital_font',
+     * then if gui.c really called us with DRAW_ITALIC flags, it means
+     * there is no italic font available, we must faking the italic by
+     * slant the upright (norm_font) to the right in a small angle, that's
+     * what we are doing in the next line.
+     *
+     * However, things get complicated when a character is slanted, it
+     * may (almost sure will) expand to the space on the right side of
+     * that character. There is no problem when a whole bunch of chars
+     * are drawn with this flag, but if the next call still ask us to
+     * draw on the same line, following the slanted texts, the new part
+     * will overwrite some part of the slanted characters we've drawn
+     * before, it's ugly, but I haven't found a better solution. */
     transform.c = (flags & DRAW_ITALIC) ? Fix2X(kATSItalicQDSkew) : 0.0;
 
     CGContextSetTextMatrix(context, transform);
@@ -1636,7 +1672,7 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
                              1.0);
 
     NSPoint textOrigin = NSMakePoint(rect.origin.x,
-                                     rect.origin.y + CTFontGetDescent(font));
+                                     FT_Y(row) - p_linespace);
     CGContextSetTextPosition(context, textOrigin.x, textOrigin.y);
 
     gui_mac_draw_ct_line(context, line, textOrigin, row);
@@ -2091,7 +2127,7 @@ NSColor *NSColorFromGuiColor(guicolor_T color, float alpha)
 
 NSRect NSRectFromVim(int row1, int col1, int row2, int col2)
 {
-    return NSMakeRect(FILL_X(col1), gui_mac.main_height - FILL_Y(row2 + 1),
+    return NSMakeRect(FILL_X(col1), FF_Y(row2 + 1),
                       FILL_X(col2 + 1) - FILL_X(col1),
                       FILL_Y(row2 + 1) - FILL_Y(row1));
 }
