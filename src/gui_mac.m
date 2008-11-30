@@ -1618,6 +1618,9 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
                                      kCFStringEncodingUTF8,
                                      false);
 
+    if (! string)
+        return;
+
     // Create the attribute for Core Text layout
     attributes = CFDictionaryCreate(kCFAllocatorDefault,
                                     (const void **) &keys,
@@ -2986,8 +2989,22 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         if ([self hasMarkedText])
         {
             // gui_mac_msg(MSG_DEBUG, @"redraw: %@", markedText);
-            NSPoint cursorPoint = NSMakePoint(FILL_X(gui_mac.im_col), FILL_Y(gui_mac.im_row + 1));
-            [markedText drawAtPoint: FLIPPED_POINT(self, cursorPoint)];
+            NSSize markedSize = [markedText size];
+            NSColor *markedBackground = [markedText attribute: NSBackgroundColorAttributeName
+                                                      atIndex: 0
+                                               effectiveRange: NULL];
+            NSFont *markedFont = [markedText attribute: NSFontAttributeName
+                                                      atIndex: 0
+                                               effectiveRange: NULL];
+            NSPoint cursorPoint = NSMakePoint(FILL_X(gui_mac.im_col),
+                                              FILL_Y(gui_mac.im_row + 1) - [markedFont leading]);
+            NSPoint markedPoint = FLIPPED_POINT(self, cursorPoint);
+
+            [markedBackground set];
+            NSRectFill(NSMakeRect(markedPoint.x, markedPoint.y - [markedFont leading],
+                                  markedSize.width, gui.char_height));
+
+            [markedText drawAtPoint: markedPoint];
         }
 #if LIGHTWEIDHT_LIVE_RESIZE
     }
