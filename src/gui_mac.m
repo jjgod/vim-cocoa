@@ -303,6 +303,9 @@ int gui_mch_init()
 {
     gui_mac_msg(MSG_INFO, @"gui_mch_init: %s", exe_name);
 
+    // Using non-UTF-8 encoding is pointless for GUI apps.
+    set_option_value((char_u *)"encoding", 0L, (char_u *)"utf-8", 0);
+
     gui_mac.app_pool = [NSAutoreleasePool new];
 
     [NSApplication sharedApplication];
