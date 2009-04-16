@@ -3222,7 +3222,7 @@ bundle-executable: $(VIMTARGET)
 
 bundle-info:  bundle-dir
 	@echo "Creating PkgInfo"
-	@echo -n "APPLVIM!" > $(APPDIR)/Contents/PkgInfo
+	@/bin/echo -n "APPLVIM!" > $(APPDIR)/Contents/PkgInfo
 	@echo "Creating Info.plist"
 	m4 $(M4FLAGSX) infplist.xml > $(APPDIR)/Contents/Info.plist
 
