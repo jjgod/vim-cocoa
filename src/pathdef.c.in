@@ -1,0 +1,12 @@
+/* pathdef.c */
+/* This file is automatically created by cmake
+ * DO NOT EDIT!  Change pathdef.c.in and CMakeLists.txt only. */
+
+#include "vim.h"
+
+char_u *default_vim_dir = (char_u *)"${VIM_DEFAULT_VIM_DIR}";
+char_u *default_vimruntime_dir = (char_u *)"${VIM_DEFAULT_VIMRUNTIME_DIR}";
+char_u *all_cflags = (char_u *)"${VIM_ALL_CFLAGS}";
+char_u *all_lflags = (char_u *)"${VIM_ALL_LFLAGS}";
+char_u *compiled_user = (char_u *)"${VIM_COMPILED_USER}";
+char_u *compiled_sys = (char_u *)"${VIM_COMPILED_SYS}";
