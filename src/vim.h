@@ -34,7 +34,7 @@
 /* ============ the header file puzzle (ca. 50-100 pieces) ========= */
 
 #ifdef HAVE_CONFIG_H	/* GNU autoconf (or something else) was here */
-# include "auto/config.h"
+# include <auto/config.h>
 # define HAVE_PATHDEF
 
 /*

@@ -27,6 +27,8 @@ if (APPLE)
   endif (CMAKE_BUILD_TYPE STREQUAL "Release")
 
   set(OS_EXTRA_SOURCES os_macosx.c os_mac_conv.c)
+  set(PYTHON_INTERP 1)
+  set(RUBY_INTERP 1)
 else (NOT APPLE)
   set(PROGNAME vim)
 endif (APPLE)
@@ -37,20 +39,27 @@ if (CMAKE_COMPILER_IS_GNUCC)
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 find_path(PYTHON_INCLUDE_DIR Python.h)
-find_path(COCOA_INCLUDE_DIR Cocoa/Cocoa.h)
+find_path(RUBY_INCLUDE_DIR   ruby.h HINTS "/System/Library/Frameworks")
+find_path(COCOA_INCLUDE_DIR  Cocoa/Cocoa.h)
 find_path(PSMTBC_INCLUDE_DIR PSMTabBarControl/PSMTabBarControl.h ${VIM_SOURCE_DIR}/mac/build/Release)
 
-include_directories(${VIM_SOURCE_DIR} ${VIM_SOURCE_DIR}/proto
-                    ${PYTHON_INCLUDE_DIR} ${COCOA_INCLUDE_DIR} ${PSMTBC_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}
+                    ${VIM_SOURCE_DIR} ${VIM_SOURCE_DIR}/proto
+                    ${PYTHON_INCLUDE_DIR} ${RUBY_INCLUDE_DIR}
+                    ${COCOA_INCLUDE_DIR} ${PSMTBC_INCLUDE_DIR})
 
 # -DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA
 add_definitions(-DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -DMACOS_X_UNIX
                 -D_FORTIFY_SOURCE=1)
 
 set(PYTHON_INTERP_SOURCES   if_python.c)
+set(RUBY_INTERP_SOURCES     if_ruby.c)
 if (PYTHON_INTERP)
     set(INTERP_SOURCES ${INTERP_SOURCES} ${PYTHON_INTERP_SOURCES})
 endif (PYTHON_INTERP)
+if (RUBY_INTERP)
+    set(INTERP_SOURCES ${INTERP_SOURCES} ${RUBY_INTERP_SOURCES})
+endif (RUBY_INTERP)
 
 set(COCOA_GUI_SOURCES       pty.c gui.c gui_mac.m)
 
@@ -60,6 +69,7 @@ endif(GUI STREQUAL "Cocoa")
 
 set(VIM_DIR_PATH                ".app/Contents/Resources/vim")
 set(PATHDEF_SOURCE              "${CMAKE_CURRENT_BINARY_DIR}/pathdef.c")
+set(CONFIG_H                    "${CMAKE_CURRENT_BINARY_DIR}/auto/config.h")
 
 set(VIM_SOURCES version.c buffer.c charset.c diff.c digraph.c edit.c eval.c
                 ex_cmds.c ex_cmds2.c ex_docmd.c ex_eval.c ex_getln.c fileio.c
@@ -73,8 +83,6 @@ set(VIM_SOURCES version.c buffer.c charset.c diff.c digraph.c edit.c eval.c
                 ${INTERP_SOURCES}
                 ${GUI_SOURCES})
 
-message("${VIM_SOURCES}")
-
 # Simply treat it as C source should be fine, otherwise cmake will choose
 # a C++ compiler to build it
 set_source_files_properties(gui_mac.m PROPERTIES LANGUAGE C)
@@ -83,14 +91,15 @@ find_library(m m)
 find_library(ncurses ncurses)
 find_library(iconv iconv)
 
-find_library(COCOA_FRAMEWORK Cocoa)
+find_library(COCOA_FRAMEWORK  Cocoa)
 find_library(PYTHON_FRAMEWORK Python)
+find_library(RUBY_FRAMEWORK   Ruby)
 
 set(PSMTBC_PATH ${VIM_SOURCE_DIR}/mac/build/Release)
 find_library(PSMTBC_FRAMEWORK PSMTabBarControl ${PSMTBC_PATH})
 
 set(VIM_LIBRARIES ${m} ${ncurses} ${iconv}
-    ${COCOA_FRAMEWORK} ${PSMTBC_FRAMEWORK} ${PYTHON_FRAMEWORK})
+    ${COCOA_FRAMEWORK} ${PSMTBC_FRAMEWORK} ${PYTHON_FRAMEWORK} ${RUBY_FRAMEWORK})
 
 file(GLOB ICON_FILES os_mac_rsrc/*.icns)
 set_source_files_properties(${ICON_FILES} PROPERTIES
@@ -117,6 +126,9 @@ endif(NOT COMPILED_BY)
 
 # Create pathdef.c, which describes the configuration of this build
 configure_file(pathdef.c.in ${PATHDEF_SOURCE} ESCAPE_QUOTES)
+
+# Create config.h like configure does
+configure_file(config.h.cmakein ${CONFIG_H} ESCAPE_QUOTES)
 
 # Variables for app bundle Info.plist generation
 set(MACOSX_BUNDLE_BUNDLE_VERSION ${VIM_VERSION})
