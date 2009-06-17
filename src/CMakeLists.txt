@@ -67,7 +67,7 @@ if (GUI STREQUAL "Cocoa")
     set(GUI_SOURCES ${COCOA_GUI_SOURCES})
 endif(GUI STREQUAL "Cocoa")
 
-set(VIM_DIR_PATH                ".app/Contents/Resources/vim")
+set(VIM_DIR_PATH                "/Resources/vim")
 set(PATHDEF_SOURCE              "${CMAKE_CURRENT_BINARY_DIR}/pathdef.c")
 set(CONFIG_H                    "${CMAKE_CURRENT_BINARY_DIR}/auto/config.h")
 
@@ -108,7 +108,7 @@ set_source_files_properties(${ICON_FILES} PROPERTIES
 set_source_files_properties(PSMTabBarControl.framework PROPERTIES
     MACOSX_PACKAGE_LOCATION Frameworks)
 
-add_executable(${PROGNAME} MACOSX_BUNDLE ${VIM_SOURCES} PSMTabBarControl.framework ${ICON_FILES})
+add_executable(${PROGNAME} MACOSX_BUNDLE ${VIM_SOURCES} ${ICON_FILES})
 target_link_libraries(${PROGNAME} ${VIM_LIBRARIES})
 
 # Variables used in pathdef.c.in
@@ -144,9 +144,12 @@ set_target_properties(${PROGNAME} PROPERTIES
 # instead we just make a symlink from the source code position to here for
 # testing purpose. When we need to 'make install', another procedure will
 # be used to ensure these resource files and frameworks are correctly copied.
-get_target_property(VIMAPP_LOCATION ${PROGNAME} LOCATION)
+get_target_property(VIMEXE_LOCATION ${PROGNAME} LOCATION)
 
-set(VIM_BUNDLE_FRAMEWORK_PATH       "${VIMAPP_LOCATION}.app/Contents/Frameworks")
+string(REPLACE "/MacOS/Vim" "" VIMAPP_LOCATION "${VIMEXE_LOCATION}")
+
+message("${VIMAPP_LOCATION}")
+set(VIM_BUNDLE_FRAMEWORK_PATH       "${VIMAPP_LOCATION}/Frameworks")
 set(PSMTBC_FRAMEWORK_PATH_IN_BUNDLE "${VIM_BUNDLE_FRAMEWORK_PATH}/PSMTabBarControl.framework")
 
 set(VIM_RUNTIME_PATH                "${VIM_SOURCE_DIR}/../runtime")
