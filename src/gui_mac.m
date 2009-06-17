@@ -176,7 +176,7 @@ static int VIMAlertTextFieldHeight = 22;
 
 @end
 
-@interface VimAppController: NSObject
+@interface VimAppController: NSObject <NSWindowDelegate>
 - (void) alertDidEnd:(VIMAlert *)alert returnCode:(int)returnCode contextInfo:(void *)contextInfo;
 - (void) panelDidEnd:(NSSavePanel *)panel code:(int)code context:(void *)context;
 - (void) initializeApplicationTimer:(NSTimer *)timer;
@@ -934,7 +934,7 @@ NSMenuItem *gui_mac_insert_menu_item(vimmenu_T *menu)
                                                    action: @selector(menuAction:)
                                             keyEquivalent: @""];
         [mac_menu_item setTarget: gui_mac.app_delegate];
-        [mac_menu_item setTag: (int) menu];
+        [mac_menu_item setTag: (NSInteger) menu];
         alloc = 1;
 
         if (menu->actext != NULL)
@@ -1357,7 +1357,7 @@ guicolor_T gui_mch_get_color(char_u *name)
     {
         if (STRICMP(name, "hilite") == 0)
         {
-            float red, green, blue, alpha;
+            CGFloat red, green, blue, alpha;
             [[NSColor highlightColor] getRed: &red
                                        green: &green
                                         blue: &blue
@@ -2867,7 +2867,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     return nil;
 }
 
-- (unsigned int) characterIndexForPoint:(NSPoint)thePoint
+- (NSUInteger) characterIndexForPoint:(NSPoint)thePoint
 {
     // gui_mac_msg(MSG_DEBUG, @"characterIndexForPoint: x = %g, y = %g", thePoint.x, thePoint.y);
     return NSNotFound;
@@ -3755,15 +3755,16 @@ int gui_mac_select_from_font_panel(char_u *font_name)
 
 - (void) setThumbValue:(long)value size:(long)size max:(long)max
 {
-    float fval = max - size + 1 > 0 ? (float) value / (max - size + 1) : 0;
-    float prop = (float) size / (max + 1);
+    double fval = max - size + 1 > 0 ? (float) value / (max - size + 1) : 0;
+    double prop = (double) size / (max + 1);
 
     if (fval < 0) fval = 0;
     else if (fval > 1.0f) fval = 1.0f;
     if (prop < 0) prop = 0;
     else if (prop > 1.0f) prop = 1.0f;
 
-    [self setFloatValue: fval knobProportion: prop];
+    [self setDoubleValue: fval];
+    [self setKnobProportion: prop];
 }
 
 - (scrollbar_T *) vimScrollBar
