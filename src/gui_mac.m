@@ -85,6 +85,7 @@ static struct
 #define VIM_MAX_COL_LEN         1024
 #define VIM_MAX_FONT_NAME_LEN   256
 #define VIM_MAX_BUTTON_TITLE    256
+#define VIM_MAX_DRAW_OP_QUEUE   1024
 #define VIM_DEFAULT_FONT_SIZE   9
 #define VIM_DEFAULT_FONT_NAME   (char_u *) "Monaco:h12"
 #define VIM_MAX_CHAR_WIDTH      2
@@ -135,7 +136,7 @@ static struct
 - (void) beginDrawing;
 - (void) endDrawing;
 
-- (void) clearAll;
+- (NSImage *) contentImage;
 
 @end
 
@@ -176,7 +177,10 @@ static int VIMAlertTextFieldHeight = 22;
 
 @end
 
-@interface VimAppController: NSObject <NSWindowDelegate>
+@interface VimAppController: NSObject
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+<NSWindowDelegate>
+#endif
 - (void) alertDidEnd:(VIMAlert *)alert returnCode:(int)returnCode contextInfo:(void *)contextInfo;
 - (void) panelDidEnd:(NSSavePanel *)panel code:(int)code context:(void *)context;
 - (void) initializeApplicationTimer:(NSTimer *)timer;
@@ -189,6 +193,55 @@ enum gui_mac_debug_level {
     MSG_DEBUG = 1,
     MSG_WARN  = 2,
     MSG_ERROR = 3
+};
+
+enum gui_mac_drawing_type {
+    INVERT_RECT,
+    CLEAR_ALL,
+    CLEAR_BLOCK,
+    SCROLL_RECT,
+    DRAW_STRING,
+    DRAW_PART_CURSOR,
+};
+
+struct gui_mac_drawing_op {
+    uint8_t type;
+
+    guicolor_T back_pixel;
+
+    union {
+        struct {
+            int r;
+            int c;
+            int nr;
+            int nc;
+        } rect1;
+        struct {
+            int row1;
+            int col1;
+            int row2;
+            int col2;
+        } rect2;
+        struct {
+            NSRect rect;
+            int lines;
+        } scroll;
+        struct {
+            int row;
+            int col;
+            char_u *s;
+            int len;
+            int flags;
+            NSColor *fg_color;
+            NSColor *bg_color;
+            NSColor *sp_color;
+        } str;
+        struct {
+            int w;
+            int h;
+            guicolor_T color;
+        } cursor;
+    } u;
 };
 
 struct gui_mac_data {
@@ -221,6 +274,9 @@ struct gui_mac_data {
     BOOL        showing_tabline;
     BOOL        selecting_tab;
     BOOL        window_opened;
+
+    struct gui_mac_drawing_op ops[VIM_MAX_DRAW_OP_QUEUE];
+    uint32_t    queued_ops;
 
     CGSize      single_advances[VIM_MAX_COL_LEN];
     CGSize      double_advances[VIM_MAX_COL_LEN];
@@ -272,6 +328,14 @@ void      gui_mac_update();
 #define gui_mac_end_drawing()       [currentView endDrawing]
 #define gui_mac_begin_tab_action()  (gui_mac.selecting_tab = YES)
 #define gui_mac_end_tab_action()    (gui_mac.selecting_tab = NO)
+
+void gui_mac_flush_queue();
+void gui_mac_clear_all(guicolor_T back_pixel);
+void gui_mac_invert_rectangle(int r, int c, int nr, int nc);
+void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back_pixel);
+void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
+                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color);
+void gui_mac_draw_part_cursor(int w, int h, guicolor_T color);
 
 int  gui_mac_hex_digit(int c);
 void gui_mac_redraw();
@@ -348,6 +412,7 @@ int gui_mch_init()
     gui_mac.showing_tabline = NO;
     gui_mac.selecting_tab  = NO;
     gui_mac.window_opened  = NO;
+    gui_mac.queued_ops     = 0;
 
     return OK;
 }
@@ -1447,6 +1512,70 @@ void gui_mch_set_sp_color(guicolor_T color)
 
 /* Drawing related {{{ */
 
+struct gui_mac_drawing_op *gui_mac_queue_op(uint8_t type)
+{
+    if (gui_mac.queued_ops >= VIM_MAX_DRAW_OP_QUEUE - 1)
+        gui_mac_flush_queue();
+
+    struct gui_mac_drawing_op *op = &gui_mac.ops[gui_mac.queued_ops++];
+
+    op->type = type;
+    op->back_pixel = gui.back_pixel;
+    return op;
+}
+
+void gui_mac_flush_queue()
+{
+    uint32_t i;
+
+    gui_mac_begin_drawing();
+
+    for (i = 0; i < gui_mac.queued_ops; i++)
+    {
+        struct gui_mac_drawing_op *op = &gui_mac.ops[i];
+
+        switch (op->type)
+        {
+        case INVERT_RECT:
+            gui_mac_invert_rectangle(op->u.rect1.r, op->u.rect1.c,
+                                     op->u.rect1.nr, op->u.rect1.nc);
+            break;
+
+        case CLEAR_ALL:
+            gui_mac_clear_all(op->back_pixel);
+            break;
+
+        case CLEAR_BLOCK:
+            gui_mac_clear_block(op->u.rect2.row1, op->u.rect2.col1,
+                                op->u.rect2.row2, op->u.rect2.col2,
+                                op->back_pixel);
+            break;
+
+        case SCROLL_RECT:
+            gui_mac_scroll_rect(op->u.scroll.rect, op->u.scroll.lines);
+            break;
+
+        case DRAW_STRING:
+            gui_mac_draw_string(op->u.str.row, op->u.str.col,
+                                op->u.str.s, op->u.str.len, op->u.str.flags,
+                                op->u.str.fg_color, op->u.str.bg_color,
+                                op->u.str.sp_color);
+            free(op->u.str.s);
+            [op->u.str.fg_color release];
+            [op->u.str.bg_color release];
+            [op->u.str.sp_color release];
+            break;
+
+        case DRAW_PART_CURSOR:
+            gui_mac_draw_part_cursor(op->u.cursor.w, op->u.cursor.h, op->u.cursor.color);
+            break;
+        }
+    }
+
+    gui_mac_end_drawing();
+    gui_mac.queued_ops = 0;
+}
+
 void gui_mch_flush()
 {
     // gui_mac_msg(MSG_DEBUG, @"gui_mch_flush");
@@ -1457,20 +1586,24 @@ static inline CGRect CGRectFromNSRect(NSRect nsRect) { return *(CGRect*)&nsRect;
 
 void gui_mch_invert_rectangle(int r, int c, int nr, int nc)
 {
-    NSRect rect;
+    struct gui_mac_drawing_op *op = gui_mac_queue_op(INVERT_RECT);
 
-    gui_mac_begin_drawing();
+    op->u.rect1.r = r;
+    op->u.rect1.c = c;
+    op->u.rect1.nr = nr;
+    op->u.rect1.nc = nc;
+}
 
-    rect = NSRectFromVim(r, c, r + nr, c + nc);
+void gui_mac_invert_rectangle(int r, int c, int nr, int nc)
+{
+    NSRect rect = NSRectFromVim(r, c, r + nr, c + nc);
 
     CGContextRef context = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-    CGContextSaveGState (context);
+    CGContextSaveGState(context);
     CGContextSetBlendMode(context, kCGBlendModeDifference);
-    CGContextSetRGBFillColor (context, 1.0, 1.0, 1.0, 1.0);
-    CGContextFillRect (context, CGRectFromNSRect(rect));
-    CGContextRestoreGState (context);
-
-    gui_mac_end_drawing();;
+    CGContextSetRGBFillColor(context, 1.0, 1.0, 1.0, 1.0);
+    CGContextFillRect(context, CGRectFromNSRect(rect));
+    CGContextRestoreGState(context);
 }
 
 void gui_mch_flash(int msec)
@@ -1479,7 +1612,16 @@ void gui_mch_flash(int msec)
 
 void gui_mch_clear_all()
 {
-    [currentView clearAll];
+    gui_mac_queue_op(CLEAR_ALL);
+}
+
+void gui_mac_clear_all(guicolor_T back_pixel)
+{
+    gui_mch_set_bg_color(back_pixel);
+
+    [gui_mac.bg_color set];
+    NSRectFill([currentView bounds]);
+
 #if GUI_MAC_DELAY_OPEN
     if (! gui_mac.window_opened)
         gui_mac_open_window();
@@ -1488,36 +1630,39 @@ void gui_mch_clear_all()
 
 void gui_mch_clear_block(int row1, int col1, int row2, int col2)
 {
+    struct gui_mac_drawing_op *op = gui_mac_queue_op(CLEAR_BLOCK);
+
+    // NSLog(@"clearBlock: (%d, %d) - (%d, %d)", row1, col1, row2, col2);
+    op->u.rect2.row1 = row1;
+    op->u.rect2.col1 = col1;
+    op->u.rect2.row2 = row2;
+    op->u.rect2.col2 = col2;
+}
+
+void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back_pixel)
+{
     NSRect rect;
 
     // NSLog(@"clearBlock: (%d, %d) - (%d, %d)", row1, col1, row2, col2);
-
-    gui_mch_set_bg_color(gui.back_pixel);
-
-    gui_mac_begin_drawing();
+    gui_mch_set_bg_color(back_pixel);
 
     rect = NSRectFromVim(row1, col1, row2, col2);
     // NSShowRect("clearBlock", rect);
 
     [gui_mac.bg_color set];
     NSRectFill(rect);
-
-    gui_mac_end_drawing();
 }
 
 void gui_mch_delete_lines(int row, int num_lines)
 {
-    NSRect src_rect;
+    struct gui_mac_drawing_op *op = gui_mac_queue_op(SCROLL_RECT);
 
-    // NSLog(@"deleteLines: (%d, %d)", row, num_lines);
-    src_rect = NSRectFromVim(row + num_lines,            // row1
-                             gui.scroll_region_left,     // col1
-                             gui.scroll_region_bot,      // row2
-                             gui.scroll_region_right);   // col2
-
-    // NSShowRect("src_rect", src_rect);
-    // move src_dest up for numlines
-    gui_mac_scroll_rect(src_rect, -num_lines);
+    // move dest up for numlines
+    op->u.scroll.rect = NSRectFromVim(row + num_lines,            // row1
+                                      gui.scroll_region_left,     // col1
+                                      gui.scroll_region_bot,      // row2
+                                      gui.scroll_region_right);   // col2
+    op->u.scroll.lines = -num_lines;
 
     gui_clear_block(gui.scroll_region_bot - num_lines + 1,
                     gui.scroll_region_left,
@@ -1527,16 +1672,15 @@ void gui_mch_delete_lines(int row, int num_lines)
 
 void gui_mch_insert_lines(int row, int num_lines)
 {
-    NSRect src_rect;
+    struct gui_mac_drawing_op *op = gui_mac_queue_op(SCROLL_RECT);
 
+    // move rect down for num_lines
     // NSLog(@"insertLines: (%d, %d)", row, num_lines);
-    src_rect = NSRectFromVim(row,                               // row1
-                             gui.scroll_region_left,            // col1
-                             gui.scroll_region_bot - num_lines, // row2
-                             gui.scroll_region_right);          // col2
-
-    // move src_dest down for num_lines
-    gui_mac_scroll_rect(src_rect, num_lines);
+    op->u.scroll.rect = NSRectFromVim(row,                               // row1
+                                      gui.scroll_region_left,            // col1
+                                      gui.scroll_region_bot - num_lines, // row2
+                                      gui.scroll_region_right);          // col2
+    op->u.scroll.lines = num_lines;
 
     /* Update gui.cursor_row if the cursor scrolled or copied over */
     if (gui.cursor_row >= gui.row
@@ -1560,6 +1704,15 @@ void gui_mch_draw_hollow_cursor(guicolor_T color)
 
 void gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
 {
+    struct gui_mac_drawing_op *op = gui_mac_queue_op(DRAW_PART_CURSOR);
+
+    op->u.cursor.w = w;
+    op->u.cursor.h = h;
+    op->u.cursor.color = color;
+}
+
+void gui_mac_draw_part_cursor(int w, int h, guicolor_T color)
+{
     NSRect rect;
     int    left;
 
@@ -1573,13 +1726,11 @@ void gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
 
     rect = NSMakeRect(left, FF_Y(gui.row + 1), w, h);
 
-    gui_mac_begin_drawing();
     [NSColorFromGuiColor(color, 1.0) set];
     // gui_mac_msg(MSG_DEBUG, @"rect = %g %g %g %g",
     //            rect.origin.x, rect.origin.y,
     //            rect.size.width, rect.size.height);
     [NSBezierPath fillRect: rect];
-    gui_mac_end_drawing();
 }
 
 void print_draw_flags(int flags)
@@ -1605,7 +1756,27 @@ void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line,
 
 void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 {
-    // gui_mac_msg(MSG_DEBUG, @"gui_mch_draw_string: %d, %d, %d", row, col, len);
+    struct gui_mac_drawing_op *op = gui_mac_queue_op(DRAW_STRING);
+
+    op->u.str.row = row;
+    op->u.str.col = col;
+
+    op->u.str.s = alloc(len + 1);
+    STRNCPY(op->u.str.s, s, len);
+
+    op->u.str.len = len;
+    op->u.str.flags = flags;
+
+    op->u.str.fg_color = [gui_mac.fg_color copy];
+    op->u.str.bg_color = [gui_mac.bg_color copy];
+    op->u.str.sp_color = [gui_mac.sp_color copy];
+}
+
+void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
+                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color)
+{
+    // gui_mac_msg(MSG_DEBUG, @"gui_mac_draw_string: %d, %d, %d, %@, %@", row, col, len,
+    //            fg_color, bg_color);
     CTLineRef               line;
     CFStringRef             string;
     CFDictionaryRef         attributes;
@@ -1613,7 +1784,7 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     CTFontRef               font = (CTFontRef) gui_mac.current_font;
 
     CFStringRef keys[] = { kCTFontAttributeName, kCTForegroundColorAttributeName };
-    CFTypeRef values[] = { font,                 gui_mac.fg_color };
+    CFTypeRef values[] = { font,                 fg_color };
 
     // Create a CFString from the original UTF-8 string 's'
     string = CFStringCreateWithBytes(kCFAllocatorDefault,
@@ -1656,8 +1827,6 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         rect.size.width = gui.char_width * cell_len;
     }
 
-    gui_mac_begin_drawing();
-
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
     CGAffineTransform transform = CGAffineTransformIdentity;
 
@@ -1681,14 +1850,14 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 
     if (! (flags & DRAW_TRANSP))
     {
-        [gui_mac.bg_color set];
+        [bg_color set];
         NSRectFill(rect);
     }
 
     CGContextSetRGBFillColor(context,
-                             [gui_mac.fg_color redComponent],
-                             [gui_mac.fg_color greenComponent],
-                             [gui_mac.fg_color blueComponent],
+                             [fg_color redComponent],
+                             [fg_color greenComponent],
+                             [fg_color blueComponent],
                              1.0);
 
     NSPoint textOrigin = NSMakePoint(rect.origin.x,
@@ -1699,7 +1868,7 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 
     if (flags & DRAW_UNDERL)
     {
-        [gui_mac.sp_color set];
+        [sp_color set];
         NSRectFill(NSMakeRect(rect.origin.x,
                               rect.origin.y + VIM_UNDERLINE_OFFSET,
                               rect.size.width, VIM_UNDERLINE_HEIGHT));
@@ -1707,7 +1876,7 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 
     if (flags & DRAW_UNDERC)
     {
-        [gui_mac.sp_color set];
+        [sp_color set];
 
         float line_end_x = rect.origin.x + rect.size.width;
         int i = 0;
@@ -1725,8 +1894,6 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
             i++;
         }
     }
-
-    gui_mac_end_drawing();
 
     CFRelease(line);
 }
@@ -2732,6 +2899,11 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     return self;
 }
 
+- (NSImage *) contentImage
+{
+    return contentImage;
+}
+
 - (void) synchronizeContentImage
 {
     NSSize size = [self frame].size;
@@ -2743,6 +2915,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         [contentImage release];
         contentImage = [[NSImage alloc] initWithSize: size];
         gui_mac.main_height = size.height;
+
+        gui_mac_redraw();
     }
 }
 
@@ -2778,18 +2952,6 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (void) endDrawing
 {
-    [contentImage unlockFocus];
-}
-
-- (void) clearAll
-{
-    gui_mch_set_bg_color(gui.back_pixel);
-
-    [contentImage lockFocus];
-
-    [gui_mac.bg_color set];
-    NSRectFill([self bounds]);
-
     [contentImage unlockFocus];
 }
 
@@ -3339,13 +3501,24 @@ void gui_mac_scroll_rect(NSRect rect, int lines)
     NSPoint dest_point = rect.origin;
     dest_point.y -= lines * gui.char_height;
 
-    gui_mac_begin_drawing();
-    NSCopyBits(0, rect, dest_point);
+    // NSLog(@"scrollRect: %@, %d", NSStringFromRect(rect), lines);
+
+    /* Set a barrier to flush previous drawing, otherwise the
+     * contentImage we used may not be updated */
     gui_mac_end_drawing();
+    gui_mac_begin_drawing();
+
+#if 1
+    [[currentView contentImage] compositeToPoint: dest_point
+                                        fromRect: rect
+                                       operation: NSCompositeCopy];
+#endif
+    // NSCopyBits(0, rect, dest_point);
 }
 
 void gui_mac_redraw()
 {
+    gui_mac_flush_queue();
     [currentView setNeedsDisplay: YES];
 }
 
