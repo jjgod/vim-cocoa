@@ -162,6 +162,7 @@ add_custom_command(TARGET ${PROGNAME}
                    COMMAND mkdir -p ${VIM_BUNDLE_VIM_PATH}
                    COMMAND cmake -E remove -f ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
                    COMMAND cmake -E remove -f ${VIM_RUNTIME_PATH_IN_BUNDLE}
-                   COMMAND cmake -E create_symlink ${PSMTBC_FRAMEWORK} ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
-                   COMMAND cmake -E create_symlink ${VIM_RUNTIME_PATH} ${VIM_RUNTIME_PATH_IN_BUNDLE}
+                   COMMAND cmake -E copy_directory ${PSMTBC_FRAMEWORK} ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
+                   COMMAND cmake -E copy_directory ${VIM_RUNTIME_PATH} ${VIM_RUNTIME_PATH_IN_BUNDLE}
                    COMMENT "Adding ${PSMTBC_FRAMEWORK} to ${VIM_BUNDLE_FRAMEWORK_PATH}" VERBATIM)
+
