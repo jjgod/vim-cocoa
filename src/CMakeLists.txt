@@ -26,7 +26,7 @@ if (APPLE)
       set(CMAKE_OSX_ARCHITECTURES i386;ppc)
   endif (CMAKE_BUILD_TYPE STREQUAL "Release")
 
-  set(OS_EXTRA_SOURCES os_macosx.c os_mac_conv.c)
+  set(OS_EXTRA_SOURCES os_macosx.m os_mac_conv.c)
   set(PYTHON_INTERP 1)
   set(RUBY_INTERP 1)
 else (NOT APPLE)
@@ -166,3 +166,5 @@ add_custom_command(TARGET ${PROGNAME}
                    COMMAND cmake -E copy_directory ${VIM_RUNTIME_PATH} ${VIM_RUNTIME_PATH_IN_BUNDLE}
                    COMMENT "Adding ${PSMTBC_FRAMEWORK} to ${VIM_BUNDLE_FRAMEWORK_PATH}" VERBATIM)
 
+install(TARGETS ${PROGNAME} BUNDLE DESTINATION /Applications)
+install(PROGRAMS mac/gvim DESTINATION bin)
