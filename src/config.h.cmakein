@@ -315,7 +315,7 @@
 /* #undef HAVE_SYSMOUSE */
 
 /* Define if you want to include the Cscope interface. */
-/* #undef FEAT_CSCOPE */
+#define FEAT_CSCOPE
 
 /* Define if you want to include multibyte support. */
 #define FEAT_MBYTE 1
