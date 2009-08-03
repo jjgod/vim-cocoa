@@ -41,7 +41,7 @@ endif (CMAKE_COMPILER_IS_GNUCC)
 find_path(PYTHON_INCLUDE_DIR Python.h)
 find_path(RUBY_INCLUDE_DIR   ruby.h HINTS "/System/Library/Frameworks")
 find_path(COCOA_INCLUDE_DIR  Cocoa/Cocoa.h)
-find_path(PSMTBC_INCLUDE_DIR PSMTabBarControl/PSMTabBarControl.h ${VIM_SOURCE_DIR}/mac/build/Release)
+find_path(PSMTBC_INCLUDE_DIR PSMTabBarControl/PSMTabBarControl.h ${VIM_SOURCE_DIR}/mac)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR}
                     ${VIM_SOURCE_DIR} ${VIM_SOURCE_DIR}/proto
@@ -95,7 +95,7 @@ find_library(COCOA_FRAMEWORK  Cocoa)
 find_library(PYTHON_FRAMEWORK Python)
 find_library(RUBY_FRAMEWORK   Ruby)
 
-set(PSMTBC_PATH ${VIM_SOURCE_DIR}/mac/build/Release)
+set(PSMTBC_PATH ${VIM_SOURCE_DIR}/mac)
 find_library(PSMTBC_FRAMEWORK PSMTabBarControl ${PSMTBC_PATH})
 
 set(VIM_LIBRARIES ${m} ${ncurses} ${iconv}
@@ -148,7 +148,6 @@ get_target_property(VIMEXE_LOCATION ${PROGNAME} LOCATION)
 
 string(REPLACE "/MacOS/Vim" "" VIMAPP_LOCATION "${VIMEXE_LOCATION}")
 
-message("${VIMAPP_LOCATION}")
 set(VIM_BUNDLE_FRAMEWORK_PATH       "${VIMAPP_LOCATION}/Frameworks")
 set(PSMTBC_FRAMEWORK_PATH_IN_BUNDLE "${VIM_BUNDLE_FRAMEWORK_PATH}/PSMTabBarControl.framework")
 
