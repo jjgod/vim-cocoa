@@ -8,7 +8,7 @@ set(VIMMINOR 2)
 set(VIM_VERSION "${VIMMAJOR}.${VIMMINOR}")
 
 if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Debug")
+    set(CMAKE_BUILD_TYPE "Release")
 endif (NOT CMAKE_BUILD_TYPE)
 
 if (NOT GUI)
