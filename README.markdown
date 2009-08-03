@@ -35,6 +35,14 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.3
+
+* Update vim to 7.2.245
+* **Rewrote** part of the rendering process to increase performance, especially on Mac OS X 10.6
+* Add clipboard support for console mode (running without `-g`)
+* Use cmake to support out-of-directory build, see BuildInstructions for detail
+* Build with `+ruby` and `+cscope` by default
+
 ### 0.3 beta 1
 
 * Updated vim to 7.2.49
