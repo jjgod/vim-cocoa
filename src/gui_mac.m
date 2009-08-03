@@ -1621,7 +1621,7 @@ void gui_mac_flush_queue()
 void gui_mch_flush()
 {
     // gui_mac_msg(MSG_DEBUG, @"gui_mch_flush");
-    // gui_mac_redraw();
+    gui_mac_redraw();
 }
 
 static inline CGRect CGRectFromNSRect(NSRect nsRect) { return *(CGRect*)&nsRect; }
