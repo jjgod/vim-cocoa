@@ -298,6 +298,55 @@ struct gui_mac_data {
 #define gui_mac_app_is_running()    (gui_mac.app_is_running == TRUE)
 #define gui_mac_get_scroller(sb)    ((VIMScroller *) sb->scroller)
 
+@interface NSString (VimStrings)
++ (id)stringWithVimString:(char_u *)s;
+- (char_u *)vimStringSave;
+@end
+
+@implementation NSString (VimStrings)
+
++ (id) stringWithVimString: (char_u *) s
+{
+    // This method ensures a non-nil string is returned.  If 's' cannot be
+    // converted to a utf-8 string it is assumed to be latin-1.  If conversion
+    // still fails an empty NSString is returned.
+    NSString *string = nil;
+    if (s) {
+#ifdef FEAT_MBYTE
+        s = CONVERT_TO_UTF8(s);
+#endif
+        string = [NSString stringWithUTF8String:(char*)s];
+        if (!string) {
+            // HACK! Apparently 's' is not a valid utf-8 string, maybe it is
+            // latin-1?
+            string = [NSString stringWithCString: (char *) s
+                                        encoding: NSISOLatin1StringEncoding];
+        }
+#ifdef FEAT_MBYTE
+        CONVERT_TO_UTF8_FREE(s);
+#endif
+    }
+
+    return string != nil ? string : [NSString string];
+}
+
+- (char_u *)vimStringSave
+{
+    char_u *s = (char_u*)[self UTF8String], *ret = NULL;
+
+#ifdef FEAT_MBYTE
+    s = CONVERT_FROM_UTF8(s);
+#endif
+    ret = vim_strsave(s);
+#ifdef FEAT_MBYTE
+    CONVERT_FROM_UTF8_FREE(s);
+#endif
+
+    return ret;
+}
+
+@end // NSString (VimStrings)
+
 /* Data Structures }}}*/
 
 /* Internal functions prototypes {{{ */
@@ -312,7 +361,7 @@ struct gui_mac_data {
 
 NSColor     *NSColorFromGuiColor(guicolor_T color, float alpha);
 NSAlertStyle NSAlertStyleFromVim(int type);
-#define      NSStringFromVim(str)    ([NSString stringWithUTF8String: (const char *) str])
+#define      NSStringFromVim(str)    ([NSString stringWithVimString: str])
 NSRect       NSRectFromVim(int row1, int col1, int row2, int col2);
 
 GuiFont gui_mac_create_related_font(GuiFont font, bool italic, bool bold);
@@ -366,9 +415,6 @@ void gui_mac_msg(int level, NSString *fmt, ...);
 int gui_mch_init()
 {
     gui_mac_msg(MSG_INFO, @"gui_mch_init: %s", exe_name);
-
-    // Using non-UTF-8 encoding is pointless for GUI apps.
-    set_option_value((char_u *)"encoding", 0L, (char_u *)"utf-8", 0);
 
     gui_mac.app_pool = [NSAutoreleasePool new];
 
@@ -994,8 +1040,7 @@ NSMenuItem *gui_mac_insert_menu_item(vimmenu_T *menu)
         mac_menu_item = [NSMenuItem separatorItem];
     else
     {
-        NSString *title = NSStringFromVim(menu->dname);
-        mac_menu_item = [[NSMenuItem alloc] initWithTitle: title
+        mac_menu_item = [[NSMenuItem alloc] initWithTitle: NSStringFromVim(menu->dname)
                                                    action: @selector(menuAction:)
                                             keyEquivalent: @""];
         [mac_menu_item setTarget: gui_mac.app_delegate];
@@ -1003,11 +1048,7 @@ NSMenuItem *gui_mac_insert_menu_item(vimmenu_T *menu)
         alloc = 1;
 
         if (menu->actext != NULL)
-        {
-            NSString *tooltip = NSStringFromVim(menu->actext);
-
-            [mac_menu_item setToolTip: tooltip];
-        }
+            [mac_menu_item setToolTip: NSStringFromVim(menu->actext)];
     }
     menu->item_handle = (void *) mac_menu_item;
 
@@ -1049,7 +1090,8 @@ void gui_mch_add_menu(vimmenu_T *menu, int idx)
     NSMenu *mac_menu = [[NSMenu alloc] initWithTitle: title];
     NSMenuItem *mac_menu_item = gui_mac_insert_menu_item(menu);
 
-    [mac_menu_item setSubmenu: mac_menu];
+    if (mac_menu_item)
+        [mac_menu_item setSubmenu: mac_menu];
     menu->menu_handle = (void *) mac_menu;
 
     [mac_menu release];
