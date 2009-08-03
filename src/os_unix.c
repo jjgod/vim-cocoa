@@ -3173,6 +3173,11 @@ mch_early_init(void)
 
 #endif
 
+#if defined(FEAT_GUI_COCOA)
+    /* Force UTF-8 encoding in vim-cocoa */
+    vim_setenv((char_u *) "LANG", (char_u *) "en_US.utf-8");
+#endif
+
     /*
      * Setup an alternative stack for signals.  Helps to catch signals when
      * running out of stack space.
