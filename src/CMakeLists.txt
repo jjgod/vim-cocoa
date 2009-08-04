@@ -163,6 +163,7 @@ add_custom_command(TARGET ${PROGNAME}
                    COMMAND cmake -E remove -f ${VIM_RUNTIME_PATH_IN_BUNDLE}
                    COMMAND cmake -E copy_directory ${PSMTBC_FRAMEWORK} ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
                    COMMAND cmake -E copy_directory ${VIM_RUNTIME_PATH} ${VIM_RUNTIME_PATH_IN_BUNDLE}
+                   COMMAND sh -c "cd ${VIM_RUNTIME_PATH_IN_BUNDLE}/doc && vim -u NONE -esX -c 'helptags ++t .' -c quit"
                    COMMENT "Adding ${PSMTBC_FRAMEWORK} to ${VIM_BUNDLE_FRAMEWORK_PATH}" VERBATIM)
 
 install(TARGETS ${PROGNAME} BUNDLE DESTINATION /Applications)
