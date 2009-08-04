@@ -35,6 +35,16 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.3.2
+
+* Fix frame height calculation when GUI tabline is enabled
+* Add back missing helptags
+
+### 0.3.1
+
+* Fix crashing on loading non-UTF-8 menu translations (reported by ducksteven and dyroro)
+* Fix delayed refreshing (reported by fishy)
+
 ### 0.3
 
 * Update vim to 7.2.245
