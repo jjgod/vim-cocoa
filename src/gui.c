@@ -1418,7 +1418,7 @@ gui_get_base_height()
 #  endif
 # endif
 # if defined(FEAT_GUI_TABLINE) && (defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_MOTIF))
+	|| defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_COCOA))
     if (gui_has_tabline())
 	base_height += gui.tabline_height;
 # endif
