@@ -3363,7 +3363,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     if ([event keyCode] == 50)
         return NO;
 
-    if ([event modifierFlags] & NSCommandKeyMask)
+    if ([event modifierFlags] & NSCommandKeyMask ||
+        [event modifierFlags] & NSControlKeyMask)
     {
         [self keyDown: event];
         return YES;
@@ -3404,7 +3405,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         }
 
         // gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
-        //            original_char, modified_char);
+        //             original_char, modified_char);
 
         vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
         // gui_mac_msg(MSG_DEBUG, @"vim_key_char: %d", vim_key_char);
@@ -3418,7 +3419,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
             break;
 
         default:
-            if (vim_modifiers & MOD_MASK_CTRL)
+            if ((vim_modifiers & MOD_MASK_CTRL) &&
+                original_char != modified_char)
             {
                 result[len++] = modified_char;
                 add_to_input_buf(result, len);
