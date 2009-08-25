@@ -35,6 +35,14 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.4
+
+* Greatly improved performance, especially visible in Snow Leopard
+* Improve startup experience
+* Launch 64-bit binary on 10.6, 32-bit binaries on 10.5
+* Fix Ctrl key handling issue in some cases like Ctrl-Tab (reported by riobard)
+* Tune resize behavior on window zoom (report by riobard)
+
 ### 0.3.2
 
 * Fix frame height calculation when GUI tabline is enabled
