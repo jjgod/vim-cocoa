@@ -23,7 +23,7 @@ if (APPLE)
 
   # Only build Universal Binary when it's release build
   if (CMAKE_BUILD_TYPE STREQUAL "Release")
-      set(CMAKE_OSX_ARCHITECTURES i386;ppc)
+      set(CMAKE_OSX_ARCHITECTURES x86_64;i386;ppc)
   endif (CMAKE_BUILD_TYPE STREQUAL "Release")
 
   set(OS_EXTRA_SOURCES os_macosx.m os_mac_conv.c)
@@ -35,7 +35,9 @@ endif (APPLE)
 
 if (CMAKE_COMPILER_IS_GNUCC)
   set(CMAKE_C_FLAGS_DEBUG "-g -Wall -Werror")
-  set(CMAKE_C_FLAGS_RELEASE "-O2 -pipe -fomit-frame-pointer")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -pipe -fomit-frame-pointer -g -Wall -mmacosx-version-min=10.5")
+  set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-mmacosx-version-min=10.5")
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 find_path(PYTHON_INCLUDE_DIR Python.h)
