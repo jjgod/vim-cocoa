@@ -11,12 +11,6 @@
  * Do ":help uganda"  in Vim to read copying and usage conditions.
  * Do ":help credits" in Vim to see a list of people who contributed.
  * See README.txt for an overview of the Vim source code.
- *
- * TODO:
- *
- * 1. Toolbar.
- * 2. GUI Tab.
- * 3. Multiple Windows.
  */
 
 #include "vim.h"
@@ -90,7 +84,6 @@ static struct
 #define VIM_DEFAULT_FONT_NAME   (char_u *) "Monaco:h12"
 #define VIM_MAX_CHAR_WIDTH      2
 
-#define GUI_MAC_DELAY_OPEN          1
 #define VIM_UNDERLINE_OFFSET        0
 #define VIM_UNDERLINE_HEIGHT        1
 #define VIM_UNDERCURL_HEIGHT        2
@@ -123,20 +116,12 @@ static struct
     NSRange              selectedRange;
     NSAttributedString  *markedText;
     NSMutableDictionary *markedTextAttributes;
-
-    NSImage             *contentImage;
     NSString            *lastSetTitle;
 }
 
 - (NSAttributedString *) markedText;
 - (void) setMarkedTextAttribute:(id)value forKey:(NSString *)key;
 - (void) mouseAction:(int)button repeated:(bool)repeated event:(NSEvent *)event;
-
-- (void) synchronizeContentImage;
-- (void) beginDrawing;
-- (void) endDrawing;
-
-- (NSImage *) contentImage;
 
 @end
 
@@ -188,12 +173,11 @@ static int VIMAlertTextFieldHeight = 22;
 - (void) menuAction:(id)sender;
 @end
 
-enum gui_mac_debug_level {
-    MSG_INFO  = 0,
-    MSG_DEBUG = 1,
-    MSG_WARN  = 2,
-    MSG_ERROR = 3
-};
+#define MSG_DEBUG   0
+#define MSG_INFO    1
+#define MSG_WARN    2
+#define MSG_ERROR   3
+#define DEBUG_LEVEL MSG_WARN
 
 enum gui_mac_drawing_type {
     INVERT_RECT,
@@ -273,7 +257,7 @@ struct gui_mac_data {
     int         debug_level;
     BOOL        showing_tabline;
     BOOL        selecting_tab;
-    BOOL        window_opened;
+    BOOL        window_at_front;
 
     struct gui_mac_drawing_op ops[VIM_MAX_DRAW_OP_QUEUE];
     uint32_t    queued_ops;
@@ -402,11 +386,28 @@ NSFont   *gui_mac_get_font(char_u *font_name, int size);
 
 int gui_mac_select_from_font_panel(char_u *font_name);
 void gui_mac_update_scrollbar(scrollbar_T *sb);
-void gui_mac_msg(int level, NSString *fmt, ...);
 
-#define NSShowRect(msg, rect)        gui_mac_msg(MSG_DEBUG, @"%s: %g %g %g %g", msg, \
-                                                 rect.origin.x, rect.origin.y, \
-                                                 rect.size.width, rect.size.height)
+#if MSG_INFO >= DEBUG_LEVEL
+#define gui_mac_info(fmt, args...) NSLog(fmt, ## args);
+#else
+#define gui_mac_info(fmt, args...)
+#endif
+
+#if MSG_DEBUG >= DEBUG_LEVEL
+#define gui_mac_debug(fmt, args...) NSLog(fmt, ## args);
+#else
+#define gui_mac_debug(fmt, args...)
+#endif
+
+#if MSG_WARN >= DEBUG_LEVEL
+#define gui_mac_warn(fmt, args...) NSLog(fmt, ## args);
+#else
+#define gui_mac_warn(fmt, args...)
+#endif
+
+#define NSShowRect(msg, rect)        gui_mac_debug(@"%s: %g %g %g %g", msg, \
+                                                   rect.origin.x, rect.origin.y, \
+                                                   rect.size.width, rect.size.height)
 
 /* Internal functions prototypes }}} */
 
@@ -414,7 +415,7 @@ void gui_mac_msg(int level, NSString *fmt, ...);
 
 int gui_mch_init()
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_init: %s", exe_name);
+    gui_mac_debug(@"gui_mch_init: %s", exe_name);
 
     gui_mac.app_pool = [NSAutoreleasePool new];
 
@@ -457,7 +458,7 @@ int gui_mch_init()
     gui_mac.initialized    = NO;
     gui_mac.showing_tabline = NO;
     gui_mac.selecting_tab  = NO;
-    gui_mac.window_opened  = NO;
+    gui_mac.window_at_front  = NO;
     gui_mac.queued_ops     = 0;
     gui_mac.clear_color    = [[NSColor whiteColor] retain];
 
@@ -466,7 +467,7 @@ int gui_mch_init()
 
 int gui_mch_init_check()
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_init_check");
+    gui_mac_debug(@"gui_mch_init_check");
 
     /* see main.c for reason to disallow */
     if (disallow_gui)
@@ -477,7 +478,7 @@ int gui_mch_init_check()
 
 void gui_mch_exit(int rc)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_exit\n");
+    gui_mac_debug(@"gui_mch_exit\n");
 
     [gui_mac.last_mouse_down_event release];
     [gui_mac.selected_file release];
@@ -491,15 +492,13 @@ void gui_mch_exit(int rc)
 
 int gui_mch_open()
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_open: %d %d", gui_win_x, gui_win_y);
+    gui_mac_debug(@"gui_mch_open: %d %d", gui_win_x, gui_win_y);
 
-#if GUI_MAC_DELAY_OPEN
-#else
     gui_mac_open_window();
 
     if (gui_win_x != -1 && gui_win_y != -1)
         gui_mch_set_winpos(gui_win_x, gui_win_y);
-#endif
+
     return OK;
 }
 
@@ -509,8 +508,7 @@ void gui_mch_prepare(int *argc, char **argv)
 
     NSString *path = [[NSBundle mainBundle] executablePath];
 
-    gui_mac.debug_level = MSG_DEBUG;
-    gui_mac_msg(MSG_INFO, @"gui_mch_prepare: %@", path);
+    gui_mac_debug(@"gui_mch_prepare: %@", path);
 
     exe_name = vim_strsave((char_u *) [path fileSystemRepresentation]);
 
@@ -534,15 +532,15 @@ void gui_mch_set_shellsize(
     contentRect.size.width = width;
     contentRect.size.height = height;
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_set_shellsize: "
+    gui_mac_debug(@"gui_mch_set_shellsize: "
                 "(%d, %d, %d, %d, %d, %d, %d)\n",
                 width, height, min_width, min_height,
                 base_width, base_height, direction);
 
-    gui_mac_msg(MSG_INFO, @"gui.num_rows (%d) * gui.char_height (%d) = %d",
+    gui_mac_debug(@"gui.num_rows (%d) * gui.char_height (%d) = %d",
                 gui.num_rows, gui.char_height, gui.num_rows * gui.char_height);
 
-    gui_mac_msg(MSG_INFO, @"gui.num_cols (%d) * gui.char_width (%d) = %d",
+    gui_mac_debug(@"gui.num_cols (%d) * gui.char_width (%d) = %d",
                 gui.num_cols, gui.char_width, gui.num_cols * gui.char_width);
 
     NSRect frame = [window frameRectForContentRect: contentRect];
@@ -559,7 +557,7 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
     expw = x + w + (gui.which_scrollbars[SBAR_RIGHT] ? gui.scrollbar_width : 0);
     exph = y + h + (gui.which_scrollbars[SBAR_BOTTOM] ? gui.scrollbar_height : 0);
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_set_text_area_pos: "
+    gui_mac_debug(@"gui_mch_set_text_area_pos: "
                 "%d, %d, %d, %d, height = %d, exph = %d, w = %d, expw = %d",
                 x, y, w, h, height, exph, width, expw);
 
@@ -592,7 +590,8 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
         if (! NSEqualRects([currentView frame], viewRect))
             [currentView setFrame: viewRect];
 
-        [currentView synchronizeContentImage];
+        gui_mac.main_height = viewRect.size.height;
+        gui_mac_redraw();
 
         if ([currentView inLiveResize])
             [gui_mac.current_window setTitle:
@@ -627,18 +626,18 @@ int gui_mch_wait_for_chars(int wtime)
 
     if (wtime == 0)
     {
-        // gui_mac_msg(MSG_DEBUG, @"gui_mch_wait_for_chars: don't wait");
+        // gui_mac_debug(@"gui_mch_wait_for_chars: don't wait");
         date = [NSDate distantPast];
     }
     else if (wtime > 0)
     {
-        // gui_mac_msg(MSG_DEBUG, @"gui_mch_wait_for_chars: wait for %d ms", wtime);
+        // gui_mac_debug(@"gui_mch_wait_for_chars: wait for %d ms", wtime);
         date = [NSDate dateWithTimeIntervalSinceNow: (double) wtime / 1000.0];
     }
     /* wtime < 0, wait forever */
     else
     {
-        // gui_mac_msg(MSG_DEBUG, @"gui_mch_wait_for_chars: wait forever");
+        // gui_mac_debug(@"gui_mch_wait_for_chars: wait forever");
         date = [NSDate distantFuture];
     }
 
@@ -649,7 +648,7 @@ int gui_mch_wait_for_chars(int wtime)
      */
     if (gui_mac.initialized == NO)
     {
-        // gui_mac_msg(MSG_DEBUG, @"first time, begin initialization...");
+        // gui_mac_debug(@"first time, begin initialization...");
         [NSTimer scheduledTimerWithTimeInterval: 0.1
                                          target: gui_mac.app_delegate
                                        selector: @selector(initializeApplicationTimer:)
@@ -658,7 +657,7 @@ int gui_mch_wait_for_chars(int wtime)
         [NSApp run];
 
         gui_mac.initialized = YES;
-        // gui_mac_msg(MSG_DEBUG, @"end initialization.");
+        // gui_mac_debug(@"end initialization.");
     }
 
     gui_mac_run_app();
@@ -697,7 +696,7 @@ void im_set_active(int active)
 
 void im_set_position(int row, int col)
 {
-    gui_mac_msg(MSG_INFO, @"im_set_position: (%d, %d)", row, col);
+    gui_mac_debug(@"im_set_position: (%d, %d)", row, col);
     gui_mac.im_row = row;
     gui_mac.im_col = col;
 }
@@ -715,7 +714,7 @@ void gui_mch_get_screen_dimensions(int *screen_w, int *screen_h)
     *screen_w = (int) rect.size.width;
     *screen_h = (int) rect.size.height;
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_get_screen_dimensions: %d, %d",
+    gui_mac_debug(@"gui_mch_get_screen_dimensions: %d, %d",
                 *screen_w, *screen_h);
 }
 
@@ -760,7 +759,7 @@ int gui_mch_init_font(char_u *font_name, int fontset)
     if (font_name == NULL)
         font_name = VIM_DEFAULT_FONT_NAME;
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_init_font: %s", font_name);
+    gui_mac_debug(@"gui_mch_init_font: %s", font_name);
 
     if (STRCMP(font_name, "*") == 0)
     {
@@ -790,7 +789,7 @@ int gui_mch_init_font(char_u *font_name, int fontset)
 
     if (vim_font == NOFONT)
     {
-        gui_mac_msg(MSG_WARN, @"find_font failed");
+        gui_mac_warn(@"find_font failed");
         return FAIL;
     }
 
@@ -802,7 +801,7 @@ int gui_mch_init_font(char_u *font_name, int fontset)
     // NSLog(@"i(%@), b(%@), ib(%@)", gui.ital_font, gui.bold_font, gui.boldital_font);
     vim_strncpy(used_font_name, font_name, sizeof(used_font_name) - 1);
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_init_font: font_name: '%s'", font_name);
+    gui_mac_debug(@"gui_mch_init_font: font_name: '%s'", font_name);
 
     hl_set_font_name(used_font_name);
 
@@ -851,11 +850,9 @@ int gui_mch_init_font(char_u *font_name, int fontset)
 
     [gui_mac.current_window setResizeIncrements: NSMakeSize(gui.char_width, gui.char_height)];
 
-#if 0
-    gui_mac_msg(MSG_INFO, @"ascent = %d, width = %d, height = %d, %f, %f",
+    gui_mac_debug(@"ascent = %d, width = %d, height = %d, %f, %f",
                 gui.char_ascent, gui.char_width, gui.char_height,
                 [mac_font ascender], [mac_font descender]);
-#endif
     [pool release];
 
     return OK;
@@ -877,7 +874,7 @@ GuiFont gui_mch_get_font(char_u *name, int giveErrorIfMissing)
 {
     GuiFont font;
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_get_font: %s", name);
+    gui_mac_debug(@"gui_mch_get_font: %s", name);
     font = gui_mac_find_font(name);
 
     if (font == NOFONT)
@@ -981,13 +978,13 @@ int gui_mch_adjust_charheight()
 
 void gui_mch_set_foreground()
 {
-    // gui_mac_msg(MSG_DEBUG, @"gui_mch_set_foreground");
+    gui_mac_debug(@"gui_mch_set_foreground");
     [gui_mac.current_window orderFront: nil];
 }
 
 void gui_mch_set_winpos(int x, int y)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_set_winpos: %d, %d", x, y);
+    gui_mac_debug(@"gui_mch_set_winpos: %d, %d", x, y);
 
     /* Get the visiable area (excluding menubar and dock) of screen */
     NSRect visibleFrame = [[NSScreen mainScreen] visibleFrame];
@@ -1007,9 +1004,9 @@ int gui_mch_get_winpos(int *x, int *y)
     float Y_vim = visibleFrame.origin.y + visibleFrame.size.height -
                   (windowRect.origin.y + windowRect.size.height);
 
-    gui_mac_msg(MSG_INFO, @"X_vim = %g - %g = %g", windowRect.origin.x,
+    gui_mac_debug(@"X_vim = %g - %g = %g", windowRect.origin.x,
                 visibleFrame.origin.x, X_vim);
-    gui_mac_msg(MSG_INFO, @"Y_vim = %g + %g - (%g + %g) = %g", visibleFrame.origin.y,
+    gui_mac_debug(@"Y_vim = %g + %g - (%g + %g) = %g", visibleFrame.origin.y,
                 visibleFrame.size.height, windowRect.origin.y, windowRect.size.height,
                 Y_vim);
 
@@ -1031,14 +1028,14 @@ int gui_mch_get_winpos(int *x, int *y)
 
 void gui_mch_settitle(char_u *title, char_u *icon)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_set_title: (%s, %s)", title, icon);
+    gui_mac_debug(@"gui_mch_set_title: (%s, %s)", title, icon);
 
     [gui_mac.current_window setTitle: NSStringFromVim(title)];
 }
 
 void gui_mch_iconify()
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_iconify");
+    gui_mac_debug(@"gui_mch_iconify");
 }
 
 /* Window Handling }}} */
@@ -1107,7 +1104,7 @@ NSMenuItem *gui_mac_insert_menu_item(vimmenu_T *menu)
 
 void gui_mch_add_menu(vimmenu_T *menu, int idx)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_add_menu: %s, %d", menu->dname, idx);
+    gui_mac_debug(@"gui_mch_add_menu: %s, %d", menu->dname, idx);
 
     NSString *title = NSStringFromVim(menu->dname);
     NSMenu *mac_menu = [[NSMenu alloc] initWithTitle: title];
@@ -1122,7 +1119,7 @@ void gui_mch_add_menu(vimmenu_T *menu, int idx)
 
 void gui_mch_add_menu_item(vimmenu_T *menu, int idx)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_add_menu_item: %s, %d", menu->dname, idx);
+    gui_mac_debug(@"gui_mch_add_menu_item: %s, %d", menu->dname, idx);
 
     gui_mac_insert_menu_item(menu);
 }
@@ -1580,7 +1577,7 @@ void gui_mch_set_sp_color(guicolor_T color)
 struct gui_mac_drawing_op *gui_mac_queue_op(uint8_t type)
 {
     if (gui_mac.queued_ops >= VIM_MAX_DRAW_OP_QUEUE - 1)
-        gui_mac_flush_queue();
+        return NULL;
 
     struct gui_mac_drawing_op *op = &gui_mac.ops[gui_mac.queued_ops++];
 
@@ -1592,8 +1589,6 @@ struct gui_mac_drawing_op *gui_mac_queue_op(uint8_t type)
 void gui_mac_flush_queue()
 {
     uint32_t i;
-
-    gui_mac_begin_drawing();
 
     for (i = 0; i < gui_mac.queued_ops; i++)
     {
@@ -1637,13 +1632,12 @@ void gui_mac_flush_queue()
         }
     }
 
-    gui_mac_end_drawing();
     gui_mac.queued_ops = 0;
 }
 
 void gui_mch_flush()
 {
-    // gui_mac_msg(MSG_DEBUG, @"gui_mch_flush");
+    // gui_mac_debug(@"gui_mch_flush");
     gui_mac_redraw();
 }
 
@@ -1653,10 +1647,13 @@ void gui_mch_invert_rectangle(int r, int c, int nr, int nc)
 {
     struct gui_mac_drawing_op *op = gui_mac_queue_op(INVERT_RECT);
 
-    op->u.rect1.r = r;
-    op->u.rect1.c = c;
-    op->u.rect1.nr = nr;
-    op->u.rect1.nc = nc;
+    if (op)
+    {
+        op->u.rect1.r = r;
+        op->u.rect1.c = c;
+        op->u.rect1.nr = nr;
+        op->u.rect1.nc = nc;
+    }
 }
 
 void gui_mac_invert_rectangle(int r, int c, int nr, int nc)
@@ -1681,6 +1678,13 @@ void gui_mch_clear_all()
     [gui_mac.clear_color release];
     gui_mac.clear_color = NSColorFromGuiColor(gui.back_pixel, VIM_BG_ALPHA);
     [gui_mac.clear_color retain];
+
+    // Show the window after first clear all
+    if (! gui_mac.window_at_front)
+    {
+        [gui_mac.current_window makeKeyAndOrderFront: nil];
+        gui_mac.window_at_front = YES;
+    }
 }
 
 void gui_mac_clear_all(guicolor_T back_pixel)
@@ -1689,11 +1693,6 @@ void gui_mac_clear_all(guicolor_T back_pixel)
 
     [gui_mac.bg_color set];
     NSRectFill([currentView bounds]);
-
-#if GUI_MAC_DELAY_OPEN
-    if (! gui_mac.window_opened)
-        gui_mac_open_window();
-#endif
 }
 
 void gui_mch_clear_block(int row1, int col1, int row2, int col2)
@@ -1701,10 +1700,13 @@ void gui_mch_clear_block(int row1, int col1, int row2, int col2)
     struct gui_mac_drawing_op *op = gui_mac_queue_op(CLEAR_BLOCK);
 
     // NSLog(@"clearBlock: (%d, %d) - (%d, %d)", row1, col1, row2, col2);
-    op->u.rect2.row1 = row1;
-    op->u.rect2.col1 = col1;
-    op->u.rect2.row2 = row2;
-    op->u.rect2.col2 = col2;
+    if (op)
+    {
+        op->u.rect2.row1 = row1;
+        op->u.rect2.col1 = col1;
+        op->u.rect2.row2 = row2;
+        op->u.rect2.col2 = col2;
+    }
 }
 
 void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back_pixel)
@@ -1725,30 +1727,36 @@ void gui_mch_delete_lines(int row, int num_lines)
 {
     struct gui_mac_drawing_op *op = gui_mac_queue_op(SCROLL_RECT);
 
-    // move dest up for numlines
-    op->u.scroll.rect = NSRectFromVim(row + num_lines,            // row1
-                                      gui.scroll_region_left,     // col1
-                                      gui.scroll_region_bot,      // row2
-                                      gui.scroll_region_right);   // col2
-    op->u.scroll.lines = -num_lines;
+    if (op)
+    {
+        // move dest up for numlines
+        op->u.scroll.rect = NSRectFromVim(row + num_lines,            // row1
+                                          gui.scroll_region_left,     // col1
+                                          gui.scroll_region_bot,      // row2
+                                          gui.scroll_region_right);   // col2
+        op->u.scroll.lines = -num_lines;
 
-    gui_clear_block(gui.scroll_region_bot - num_lines + 1,
-                    gui.scroll_region_left,
-                    gui.scroll_region_bot,
-                    gui.scroll_region_right);
+        gui_clear_block(gui.scroll_region_bot - num_lines + 1,
+                        gui.scroll_region_left,
+                        gui.scroll_region_bot,
+                        gui.scroll_region_right);
+    }
 }
 
 void gui_mch_insert_lines(int row, int num_lines)
 {
     struct gui_mac_drawing_op *op = gui_mac_queue_op(SCROLL_RECT);
 
-    // move rect down for num_lines
-    // NSLog(@"insertLines: (%d, %d)", row, num_lines);
-    op->u.scroll.rect = NSRectFromVim(row,                               // row1
-                                      gui.scroll_region_left,            // col1
-                                      gui.scroll_region_bot - num_lines, // row2
-                                      gui.scroll_region_right);          // col2
-    op->u.scroll.lines = num_lines;
+    if (op)
+    {
+        // move rect down for num_lines
+        // NSLog(@"insertLines: (%d, %d)", row, num_lines);
+        op->u.scroll.rect = NSRectFromVim(row,                               // row1
+                                          gui.scroll_region_left,            // col1
+                                          gui.scroll_region_bot - num_lines, // row2
+                                          gui.scroll_region_right);          // col2
+        op->u.scroll.lines = num_lines;
+    }
 
     /* Update gui.cursor_row if the cursor scrolled or copied over */
     if (gui.cursor_row >= gui.row
@@ -1774,9 +1782,12 @@ void gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
 {
     struct gui_mac_drawing_op *op = gui_mac_queue_op(DRAW_PART_CURSOR);
 
-    op->u.cursor.w = w;
-    op->u.cursor.h = h;
-    op->u.cursor.color = color;
+    if (op)
+    {
+        op->u.cursor.w = w;
+        op->u.cursor.h = h;
+        op->u.cursor.color = color;
+    }
 }
 
 void gui_mac_draw_part_cursor(int w, int h, guicolor_T color)
@@ -1795,9 +1806,9 @@ void gui_mac_draw_part_cursor(int w, int h, guicolor_T color)
     rect = NSMakeRect(left, FF_Y(gui.row + 1), w, h);
 
     [NSColorFromGuiColor(color, 1.0) set];
-    // gui_mac_msg(MSG_DEBUG, @"rect = %g %g %g %g",
-    //            rect.origin.x, rect.origin.y,
-    //            rect.size.width, rect.size.height);
+    gui_mac_debug(@"rect = %g %g %g %g",
+                  rect.origin.x, rect.origin.y,
+                  rect.size.width, rect.size.height);
     [NSBezierPath fillRect: rect];
 }
 
@@ -1826,24 +1837,27 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
 {
     struct gui_mac_drawing_op *op = gui_mac_queue_op(DRAW_STRING);
 
-    op->u.str.row = row;
-    op->u.str.col = col;
+    if (op)
+    {
+        op->u.str.row = row;
+        op->u.str.col = col;
 
-    op->u.str.s = alloc(len + 1);
-    STRNCPY(op->u.str.s, s, len);
+        op->u.str.s = alloc(len + 1);
+        STRNCPY(op->u.str.s, s, len);
 
-    op->u.str.len = len;
-    op->u.str.flags = flags;
+        op->u.str.len = len;
+        op->u.str.flags = flags;
 
-    op->u.str.fg_color = [gui_mac.fg_color copy];
-    op->u.str.bg_color = [gui_mac.bg_color copy];
-    op->u.str.sp_color = [gui_mac.sp_color copy];
+        op->u.str.fg_color = [gui_mac.fg_color copy];
+        op->u.str.bg_color = [gui_mac.bg_color copy];
+        op->u.str.sp_color = [gui_mac.sp_color copy];
+    }
 }
 
 void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
                          NSColor *fg_color, NSColor *bg_color, NSColor *sp_color)
 {
-    // gui_mac_msg(MSG_DEBUG, @"gui_mac_draw_string: %d, %d, %d, %@, %@", row, col, len,
+    // gui_mac_debug(@"gui_mac_draw_string: %d, %d, %d, %@, %@", row, col, len,
     //            fg_color, bg_color);
     CTLineRef               line;
     CFStringRef             string;
@@ -2028,7 +2042,7 @@ const char *scrollbar_desc(scrollbar_T *sb)
 
 void gui_mch_create_scrollbar(scrollbar_T *sb, int orient)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_create_scrollbar: ident = %ld, "
+    gui_mac_debug(@"gui_mch_create_scrollbar: ident = %ld, "
                 "type = %s, value = %ld, size = %ld, "
                 "max = %ld, top = %d, height = %d, "
                 "width = %d, status_height = %d, %s",
@@ -2047,7 +2061,7 @@ void gui_mch_destroy_scrollbar(scrollbar_T *sb)
 {
     VIMScroller *scroller = gui_mac_get_scroller(sb);
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_destroy_scrollbar: %s (%ld)",
+    gui_mac_debug(@"gui_mch_destroy_scrollbar: %s (%ld)",
                 scrollbar_desc(sb), sb->ident);
 
     sb->enabled = FALSE;
@@ -2061,7 +2075,7 @@ void gui_mch_destroy_scrollbar(scrollbar_T *sb)
 
 void gui_mch_enable_scrollbar(scrollbar_T *sb, int flag)
 {
-    gui_mac_msg(MSG_INFO, @"%s scrollbar: %s (%d)",
+    gui_mac_debug(@"%s scrollbar: %s (%d)",
                 flag == TRUE ? "enable" : "disable", scrollbar_desc(sb),
                 sb->ident);
 
@@ -2079,7 +2093,7 @@ void gui_mch_set_scrollbar_pos(
     int w,
     int h)
 {
-    gui_mac_msg(MSG_INFO, @"set scrollbar pos: %s (%ld), (%d, %d, %d, %d)",
+    gui_mac_debug(@"set scrollbar pos: %s (%ld), (%d, %d, %d, %d)",
                 scrollbar_desc(sb), sb->ident, x, y, w, h);
 
     gui_mac_update_scrollbar(sb);
@@ -2169,7 +2183,7 @@ void gui_mch_start_blink()
 
 void gui_mch_set_curtab(int nr)
 {
-    gui_mac_msg(MSG_INFO, @"gui_mch_set_curtab(%d)", nr);
+    gui_mac_debug(@"gui_mch_set_curtab(%d)", nr);
 }
 
 void gui_mch_show_tabline(int showit)
@@ -2178,7 +2192,7 @@ void gui_mch_show_tabline(int showit)
 
     gui_mac.showing_tabline = showit;
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_show_tabline: %s", showit ? "YES" : "NO");
+    gui_mac_debug(@"gui_mch_show_tabline: %s", showit ? "YES" : "NO");
     view = [gui_mac.current_window contentView];
     [[view tabBarControl] setHidden: (showit ? NO : YES)];
     // NSShowRect("tabBarControl", [[view tabBarControl] frame]);
@@ -2199,7 +2213,7 @@ void gui_mch_update_tabline()
     NSTabViewItem  *item;
     int             currentTabIndex = tabpage_index(curtab) - 1;
 
-    gui_mac_msg(MSG_INFO, @"gui_mch_update_tabline: cti = %d, otc = %d",
+    gui_mac_debug(@"gui_mch_update_tabline: cti = %d, otc = %d",
                 currentTabIndex, originalTabCount);
 
     for (tp = first_tabpage, i = 0;
@@ -2213,7 +2227,7 @@ void gui_mch_update_tabline()
         if (len <= 0) continue;
 
         s = CONVERT_TO_UTF8(s);
-        // gui_mac_msg(MSG_DEBUG, @"label (%d): %s", i, s);
+        // gui_mac_debug(@"label (%d): %s", i, s);
         if (i >= originalTabCount)
         {
             gui_mac_begin_tab_action();
@@ -2228,7 +2242,7 @@ void gui_mch_update_tabline()
         CONVERT_TO_UTF8_FREE(s);
     }
 
-    // gui_mac_msg(MSG_DEBUG, @"total tab count = %d", i);
+    // gui_mac_debug(@"total tab count = %d", i);
     for (j = originalTabCount - 1; j >= i; j--)
     {
         NSTabViewItem *item = [tabViewItems objectAtIndex: i];
@@ -2311,20 +2325,6 @@ NSRect NSRectFromVim(int row1, int col1, int row2, int col2)
     return NSMakeRect(FILL_X(col1), FF_Y(row2 + 1),
                       FILL_X(col2 + 1) - FILL_X(col1),
                       FILL_Y(row2 + 1) - FILL_Y(row1));
-}
-
-void gui_mac_msg(int level, NSString *fmt, ...)
-{
-#if GUI_MAC_DEBUG
-    if (level >= gui_mac.debug_level)
-    {
-        va_list ap;
-
-        va_start(ap, fmt);
-        NSLogv(fmt, ap);
-        va_end(ap);
-    }
-#endif
 }
 
 /* Application Related Utilities {{{2 */
@@ -2529,7 +2529,7 @@ finish:
 {
     NSTimeInterval on_time, off_time;
 
-    gui_mac_msg(MSG_DEBUG, @"blinkCursorTimer: %s",
+    gui_mac_debug(@"blinkCursorTimer: %s",
                 gui_mac.blink_state == BLINK_ON ? "BLINK_ON"
                                                 : (gui_mac.blink_state == BLINK_OFF ? "BLINK_OFF"
                                                                                     : "BLINK_NONE"));
@@ -2596,7 +2596,7 @@ finish:
         return;
 
     NSFont *selected_font = [[NSFontManager sharedFontManager] selectedFont];
-    // gui_mac_msg(MSG_DEBUG, @"font panel will close: %@", selected_font);
+    gui_mac_debug(@"font panel will close: %@", selected_font);
 
     gui_mac.selected_font = selected_font;
     [NSApp stop: self];
@@ -2620,7 +2620,7 @@ finish:
     width  = (int) size.width;
     height = (int) size.height;
 
-    gui_mac_msg(MSG_INFO, @"windowDidResize: (%d, %d)", width, height);
+    gui_mac_debug(@"windowDidResize: (%d, %d)", width, height);
     gui_resize_shell(width, height);
 
     gui_mac_update();
@@ -2744,9 +2744,6 @@ void gui_mac_open_window()
         [window center];
     else
         [window setFrameTopLeftPoint: topLeft];
-
-    [window makeKeyAndOrderFront: nil];
-    gui_mac.window_opened = YES;
 }
 
 /* Window related Utilities 2}}} */
@@ -2825,7 +2822,7 @@ void gui_mac_open_window()
 -        (BOOL) tabView: (NSTabView *) theTabView
 shouldSelectTabViewItem: (NSTabViewItem *) tabViewItem
 {
-    gui_mac_msg(MSG_INFO, @"tabView:shouldSelectTabViewItem: %@, %s",
+    gui_mac_debug(@"tabView:shouldSelectTabViewItem: %@, %s",
                 tabViewItem, gui_mac.selecting_tab == YES ? "YES" : "NO");
 
     if (gui_mac.selecting_tab == NO)
@@ -2856,7 +2853,7 @@ shouldCloseTabViewItem: (NSTabViewItem *) tabViewItem
 didDragTabViewItem: (NSTabViewItem *) tabViewItem
            toIndex: (int) idx
 {
-    gui_mac_msg(MSG_INFO, @"tabView:didDragTabViewItem: %@ toIndex: %d",
+    gui_mac_debug(@"tabView:didDragTabViewItem: %@ toIndex: %d",
                 tabViewItem, idx);
     tabpage_move(idx);
     gui_mac_update();
@@ -2882,36 +2879,10 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                     NSFilenamesPboardType, NSStringPboardType, nil]];
 
         if (! NSEqualRects(rect, NSZeroRect))
-        {
-            contentImage = [[NSImage alloc] initWithSize: rect.size];
             gui_mac.main_height = rect.size.height;
-        }
-
-        else contentImage = nil;
     }
 
     return self;
-}
-
-- (NSImage *) contentImage
-{
-    return contentImage;
-}
-
-- (void) synchronizeContentImage
-{
-    NSSize size = [self frame].size;
-
-    if (! NSEqualSizes([contentImage size], size))
-    {
-        gui_mac_msg(MSG_INFO, @"REALLOCATE content image to: (%g, %g)",
-                    size.width, size.height);
-        [contentImage release];
-        contentImage = [[NSImage alloc] initWithSize: size];
-        gui_mac.main_height = size.height;
-
-        gui_mac_redraw();
-    }
 }
 
 - (void) viewWillStartLiveResize
@@ -2933,20 +2904,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 {
     [markedTextAttributes release];
     [markedText release];
-    [contentImage release];
     [lastSetTitle release];
 
     [super dealloc];
-}
-
-- (void) beginDrawing
-{
-    [contentImage lockFocus];
-}
-
-- (void) endDrawing
-{
-    [contentImage unlockFocus];
 }
 
 - (NSAttributedString *) markedText
@@ -2982,7 +2942,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (void) setMarkedText:(id)aString selectedRange:(NSRange)selRange
 {
-    // gui_mac_msg(MSG_DEBUG, @"setMarkedText: %@ (%u, %u)", aString,
+    // gui_mac_debug(@"setMarkedText: %@ (%u, %u)", aString,
     //             selRange.location, selRange.length);
 
     markedRange = NSMakeRange(0, [aString length]);
@@ -2999,7 +2959,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     {
     } else
     {
-        // gui_mac_msg(MSG_DEBUG, @"clear markedText");
+        // gui_mac_debug(@"clear markedText");
         gui_update_cursor(TRUE, FALSE);
     }
 
@@ -3010,7 +2970,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 {
     markedRange = NSMakeRange(NSNotFound, 0);
 
-    // gui_mac_msg(MSG_DEBUG, @"unmarkText");
+    // gui_mac_debug(@"unmarkText");
 }
 
 - (NSArray *) validAttributesForMarkedText
@@ -3025,7 +2985,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (NSUInteger) characterIndexForPoint:(NSPoint)thePoint
 {
-    // gui_mac_msg(MSG_DEBUG, @"characterIndexForPoint: x = %g, y = %g", thePoint.x, thePoint.y);
+    // gui_mac_debug(@"characterIndexForPoint: x = %g, y = %g", thePoint.x, thePoint.y);
     return NSNotFound;
 }
 
@@ -3064,7 +3024,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     size_t  u16_len, enc_len, result_len = 0;
     char_u  result[INLINE_KEY_BUFFER_SIZE];
 
-    // gui_mac_msg(MSG_DEBUG, @"insertText: %@", aString);
+    // gui_mac_debug(@"insertText: %@", aString);
 
     u16_len = [aString length] * 2;
     text = (unichar *) alloc(u16_len);
@@ -3105,11 +3065,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (void) drawRect:(NSRect)rect
 {
-#if 0
-    gui_mac_msg(MSG_INFO, @"drawRect: (%f, %f), (%f, %f)",
+    gui_mac_debug(@"drawRect: (%f, %f), (%f, %f)",
                 rect.origin.x, rect.origin.y,
                 rect.size.width, rect.size.height);
-#endif
 #if LIGHTWEIDHT_LIVE_RESIZE
     if ([self inLiveResize])
     {
@@ -3141,13 +3099,12 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     else
     {
 #endif
-        [contentImage compositeToPoint: rect.origin
-                              fromRect: rect
-                             operation: NSCompositeCopy];
+        gui_mac_flush_queue();
 
         if ([self hasMarkedText])
         {
-            // gui_mac_msg(MSG_DEBUG, @"redraw: %@", markedText);
+            gui_mac_debug(@"redraw: %@", markedText);
+
             NSSize markedSize = [markedText size];
             NSColor *markedBackground = [markedText attribute: NSBackgroundColorAttributeName
                                                       atIndex: 0
@@ -3213,8 +3170,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
     gui_mac.last_mouse_down_event = [event copy];
 
-    // gui_mac_msg(MSG_DEBUG, @"mouseDown: %s",
-    //             button == MOUSE_LEFT ? "MOUSE_LEFT" : "MOUSE_RIGHT");
+    gui_mac_debug(@"mouseDown: %s",
+                  button == MOUSE_LEFT ? "MOUSE_LEFT" : "MOUSE_RIGHT");
 
     [self mouseAction: button
              repeated: [event clickCount] != 0
@@ -3389,7 +3346,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     /* convert NS* style modifier flags to vim style */
     vim_modifiers = gui_mac_key_modifiers_to_vim(mac_modifiers);
 
-    // gui_mac_msg(MSG_DEBUG, @"keyDown: characters = %d", [[event characters] length]);
+    gui_mac_debug(@"keyDown: characters = %d", [[event characters] length]);
 
     if ([[event characters] length] == 1)
     {
@@ -3404,11 +3361,11 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
             got_int = TRUE;
         }
 
-        // gui_mac_msg(MSG_DEBUG, @"original_char %d, modified_char: %d",
-        //             original_char, modified_char);
+        gui_mac_debug(@"original_char %d, modified_char: %d",
+                      original_char, modified_char);
 
         vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
-        // gui_mac_msg(MSG_DEBUG, @"vim_key_char: %d", vim_key_char);
+        gui_mac_debug(@"vim_key_char: %d", vim_key_char);
 
         switch (vim_modifiers)
         {
@@ -3424,7 +3381,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
             {
                 result[len++] = modified_char;
                 add_to_input_buf(result, len);
-                // gui_mac_msg(MSG_DEBUG, @"CTRL-%c, add_to_input_buf: %d", original_char, len);
+                gui_mac_debug(@"CTRL-%c, add_to_input_buf: %d", original_char, len);
 
                 gui_mac_stop_app(YES);
                 return;
@@ -3445,7 +3402,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         {
             add_to_key_buffer(result, len, CSI, KS_MODIFIER, vim_modifiers);
 
-            // gui_mac_msg(MSG_DEBUG, "vim_modifiers: ");
+            // gui_mac_debug("vim_modifiers: ");
             // print_vim_modifiers(vim_modifiers);
         }
 
@@ -3463,15 +3420,15 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                                   K_SECOND(vim_key_char),
                                   K_THIRD(vim_key_char));
 
-            // gui_mac_msg(MSG_DEBUG, @"IS_SPECIAL, add_to_input_buf: %d", len);
+            gui_mac_debug(@"IS_SPECIAL, add_to_input_buf: %d", len);
         }
 
         /* now here are normal characters */
         else if (vim_modifiers)
         {
             result[len++] = original_char;
-            // gui_mac_msg(MSG_DEBUG, @"original_char %c, add_to_input_buf: %d",
-            //             original_char, len);
+            gui_mac_debug(@"original_char %c, add_to_input_buf: %d",
+                          original_char, len);
         }
 
         if (len > 0)
@@ -3497,24 +3454,11 @@ void gui_mac_scroll_rect(NSRect rect, int lines)
     NSPoint dest_point = rect.origin;
     dest_point.y -= lines * gui.char_height;
 
-    // NSLog(@"scrollRect: %@, %d", NSStringFromRect(rect), lines);
-
-    /* Set a barrier to flush previous drawing, otherwise the
-     * contentImage we used may not be updated */
-    gui_mac_end_drawing();
-    gui_mac_begin_drawing();
-
-#if 1
-    [[currentView contentImage] compositeToPoint: dest_point
-                                        fromRect: rect
-                                       operation: NSCompositeCopy];
-#endif
-    // NSCopyBits(0, rect, dest_point);
+    NSCopyBits(0, rect, dest_point);
 }
 
 void gui_mac_redraw()
 {
-    gui_mac_flush_queue();
     [currentView setNeedsDisplay: YES];
 }
 
@@ -3594,10 +3538,10 @@ int gui_mac_mouse_button_to_vim(int mac_button)
 
 NSFont *gui_mac_get_font(char_u *font_name, int size)
 {
-    // gui_mac_msg(MSG_DEBUG, @"get_font: %s", font_name);
+    gui_mac_debug(@"get_font: %s", font_name);
     NSString *mac_font_name = NSStringFromVim(font_name);
 
-    // gui_mac_msg(MSG_DEBUG, @"fontWithName: %@, %d", mac_font_name, size);
+    gui_mac_debug(@"fontWithName: %@, %d", mac_font_name, size);
 
     return [NSFont fontWithName: mac_font_name
                            size: size];
@@ -3610,7 +3554,7 @@ GuiFont gui_mac_find_font(char_u *font_spec)
     char_u   *font_style, *p;
     char_u    font_name[VIM_MAX_FONT_NAME_LEN];
 
-    // gui_mac_msg(MSG_DEBUG, @"find_font: %s", font_spec);
+    gui_mac_debug(@"find_font: %s", font_spec);
 
     font_style = vim_strchr(font_spec, ':');
     len = font_style - font_spec;
@@ -3898,7 +3842,7 @@ int gui_mac_select_from_font_panel(char_u *font_name)
         break;
     }
 
-    //gui_mac_msg(MSG_DEBUG, @"value %d -> %d", sb_info->value, value);
+    //gui_mac_debug(@"value %d -> %d", sb_info->value, value);
     gui_drag_scrollbar(sb, value, isStillDragging);
     gui_mac_redraw();
     if (updateKnob)
@@ -3951,13 +3895,13 @@ void gui_mac_update_scrollbar(scrollbar_T *sb)
     if (sb->enabled == TRUE && [scroller superview] != [gui_mac.current_window contentView])
     {
         [[gui_mac.current_window contentView] addSubview: scroller];
-        // gui_mac_msg(MSG_DEBUG, @"addSubview: %s", scrollbar_desc(sb));
+        gui_mac_debug(@"addSubview: %s", scrollbar_desc(sb));
     }
 
     if (sb->enabled == FALSE && [scroller superview] == [gui_mac.current_window contentView])
     {
         [scroller removeFromSuperview];
-        // gui_mac_msg(MSG_DEBUG, @"removeFromSuperview: %s", scrollbar_desc(sb));
+        gui_mac_debug(@"removeFromSuperview: %s", scrollbar_desc(sb));
     }
 }
 
