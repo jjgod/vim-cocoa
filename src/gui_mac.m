@@ -219,6 +219,7 @@ struct gui_mac_drawing_op {
             NSColor *fg_color;
             NSColor *bg_color;
             NSColor *sp_color;
+            CTFontRef font;
         } str;
         struct {
             int w;
@@ -367,7 +368,8 @@ void gui_mac_clear_all(guicolor_T back_pixel);
 void gui_mac_invert_rectangle(int r, int c, int nr, int nc);
 void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back_pixel);
 void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
-                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color);
+                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color,
+                         CTFontRef font);
 void gui_mac_draw_part_cursor(int w, int h, guicolor_T color);
 
 int  gui_mac_hex_digit(int c);
@@ -1619,7 +1621,7 @@ void gui_mac_flush_queue()
             gui_mac_draw_string(op->u.str.row, op->u.str.col,
                                 op->u.str.s, op->u.str.len, op->u.str.flags,
                                 op->u.str.fg_color, op->u.str.bg_color,
-                                op->u.str.sp_color);
+                                op->u.str.sp_color, op->u.str.font);
             free(op->u.str.s);
             [op->u.str.fg_color release];
             [op->u.str.bg_color release];
@@ -1851,11 +1853,13 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         op->u.str.fg_color = [gui_mac.fg_color copy];
         op->u.str.bg_color = [gui_mac.bg_color copy];
         op->u.str.sp_color = [gui_mac.sp_color copy];
+        op->u.str.font     = (CTFontRef) gui_mac.current_font;
     }
 }
 
 void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
-                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color)
+                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color,
+                         CTFontRef font)
 {
     // gui_mac_debug(@"gui_mac_draw_string: %d, %d, %d, %@, %@", row, col, len,
     //            fg_color, bg_color);
@@ -1863,7 +1867,6 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
     CFStringRef             string;
     CFDictionaryRef         attributes;
     CFAttributedStringRef   attrString;
-    CTFontRef               font = (CTFontRef) gui_mac.current_font;
 
     CFStringRef keys[] = { kCTFontAttributeName, kCTForegroundColorAttributeName };
     CFTypeRef values[] = { font,                 fg_color };
@@ -1986,6 +1989,8 @@ void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line, NSPoint origin, 
     CFIndex runCount = CFArrayGetCount(runArray);
     CFIndex i, glyphOffset;
     CGFloat x;
+    const CGGlyph mglyphs[1] = { '_' };
+    CGSize advances[1];
 
     for (i = 0, x = origin.x, glyphOffset = 0; i < runCount; i++)
     {
@@ -1993,9 +1998,25 @@ void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line, NSPoint origin, 
         CFDictionaryRef attrDict = CTRunGetAttributes(run);
         CTFontRef        runFont = (CTFontRef) CFDictionaryGetValue(attrDict,
                                                                     kCTFontAttributeName);
-        bool            isDouble = (runFont != (CTFontRef) gui_mac.current_font);
+        bool            isDouble = NO;
         CFIndex              len = CTRunGetGlyphCount(run);
         CGFloat          advance = len * gui.char_width;
+
+        // If it's the norm_font / bold_font / boldital_font we originally
+        // selected, apparently it's not double width fonts.
+        if (runFont == (CTFontRef) gui.norm_font ||
+            runFont == (CTFontRef) gui.bold_font ||
+            runFont == (CTFontRef) gui.ital_font ||
+            runFont == (CTFontRef) gui.boldital_font)
+            isDouble = NO;
+        else
+        {
+            // Otherwise we need to check the advances for its actual width
+            CTFontGetAdvancesForGlyphs(runFont, kCTFontDefaultOrientation,
+                                       mglyphs, advances, 1);
+            isDouble = (advances[0].width != gui.char_width) ? YES : NO;
+        }
+
         if (isDouble)
             advance *= 2;
 
