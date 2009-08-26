@@ -3392,6 +3392,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         {
         case MOD_MASK_ALT:
         case MOD_MASK_SHIFT:
+        case MOD_MASK_ALT | MOD_MASK_SHIFT:
             if (vim_key_char == 0)
                 goto insert_text;
             break;
