@@ -3373,6 +3373,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     char_u          result[INLINE_KEY_BUFFER_SIZE];
     int             len = 0;
     int             vim_key_char;
+    bool            should_remove_ctrl = NO;
 
     [NSCursor setHiddenUntilMouseMoves: YES];
 
@@ -3384,96 +3385,88 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
     gui_mac_debug(@"keyDown: characters = %d", [[event characters] length]);
 
-    if ([[event characters] length] == 1)
+    if ([[event characters] length] != 1)
+        goto insert_text;
+
+    modified_char = [[event characters] characterAtIndex: 0];
+    original_char = [[event charactersIgnoringModifiers] characterAtIndex: 0];
+
+    /* Intercept CMD-. and CTRL-c */
+    if ((modified_char == Ctrl_C && ctrl_c_interrupts) ||
+        (modified_char == intr_char && intr_char != Ctrl_C))
     {
-        modified_char = [[event characters] characterAtIndex: 0];
-        original_char = [[event charactersIgnoringModifiers] characterAtIndex: 0];
+        trash_input_buf();
+        got_int = TRUE;
+    }
 
-        /* Intercept CMD-. and CTRL-c */
-        if ((modified_char == Ctrl_C && ctrl_c_interrupts) ||
-            (modified_char == intr_char && intr_char != Ctrl_C))
-        {
-            trash_input_buf();
-            got_int = TRUE;
-        }
+    gui_mac_debug(@"original_char %d, modified_char: %d",
+                  original_char, modified_char);
 
-        gui_mac_debug(@"original_char %d, modified_char: %d",
-                      original_char, modified_char);
+    /* hmm, have to hard-coded this? */
+    vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
 
-        vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
-        gui_mac_debug(@"vim_key_char: %d", vim_key_char);
+    should_remove_ctrl = (! vim_key_char && modified_char < 0x20) ? YES : NO;
+    if (vim_key_char !=
+        gui_mac_function_key_to_vim(original_char, vim_modifiers & ~MOD_MASK_CTRL))
+        should_remove_ctrl = YES;
 
-        switch (vim_modifiers)
-        {
-        case MOD_MASK_ALT:
-        case MOD_MASK_SHIFT:
-        case MOD_MASK_ALT | MOD_MASK_SHIFT:
-            if (vim_key_char == 0)
-                goto insert_text;
-            break;
+    gui_mac_debug(@"vim_key_char: %d, K_RIGHT = %d", vim_key_char, K_RIGHT);
 
-        default:
-            if ((vim_modifiers & MOD_MASK_CTRL) &&
-                original_char != modified_char)
-            {
-                result[len++] = modified_char;
-                add_to_input_buf(result, len);
-                gui_mac_debug(@"CTRL-%c, add_to_input_buf: %d", original_char, len);
+    switch (vim_modifiers)
+    {
+    case MOD_MASK_ALT:
+    case MOD_MASK_ALT | MOD_MASK_SHIFT:
+        if (vim_key_char == 0)
+            goto insert_text;
+        break;
+    }
 
-                gui_mac_stop_app(YES);
-                return;
-            }
-        }
+    /* if it's normal key, not special one, then Shift is already applied */
+    if (vim_key_char == 0 ||
+        ! (vim_key_char == ' '  ||
+           vim_key_char == 0xa0 ||
+           (vim_modifiers & MOD_MASK_CMD) ||
+           vim_key_char == 0x9  ||
+           vim_key_char == 0xd  ||
+           vim_key_char == ESC))
+        vim_modifiers &= ~MOD_MASK_SHIFT;
 
-        /* if it's normal key, not special one, then Shift is already applied */
-        if (vim_key_char == 0 ||
-            ! (vim_key_char == ' '  ||
-               vim_key_char == 0xa0 ||
-               (vim_modifiers & MOD_MASK_CMD) ||
-               vim_key_char == 0x9  ||
-               vim_key_char == 0xd  ||
-               vim_key_char == ESC))
-            vim_modifiers &= ~MOD_MASK_SHIFT;
+    /* remove CTRL from keys that already have it */
+    if (should_remove_ctrl)
+        vim_modifiers &= ~MOD_MASK_CTRL;
 
-        if (vim_modifiers)
-        {
-            add_to_key_buffer(result, len, CSI, KS_MODIFIER, vim_modifiers);
+    if (vim_modifiers)
+    {
+        add_to_key_buffer(result, len, CSI, KS_MODIFIER, vim_modifiers);
+#if 0
+        fprintf(stderr, "vim_modifiers: ");
+        print_vim_modifiers(vim_modifiers);
+        fprintf(stderr, "\n");
+#endif
+    }
 
-            // gui_mac_debug("vim_modifiers: ");
-            // print_vim_modifiers(vim_modifiers);
-        }
+    if (IS_SPECIAL(vim_key_char))
+    {
+        if ([self hasMarkedText])
+            goto insert_text;
 
-        if (IS_SPECIAL(vim_key_char) || vim_key_char > 0)
-        {
-            if ([self hasMarkedText])
-                goto insert_text;
+        add_to_key_buffer(result, len, CSI,
+                          K_SECOND(vim_key_char),
+                          K_THIRD(vim_key_char));
 
-            /* must be enter, esc, backspace, tab, add to input buffer directly */
-            if (vim_key_char > 0)
-                result[len++] = vim_key_char;
+        gui_mac_info(@"IS_SPECIAL, add_to_input_buf: %d", vim_key_char);
+    }
+    else
+    {
+        result[len++] = vim_key_char > 0 ? vim_key_char : modified_char;
+        gui_mac_info(@"add_to: %d", result[len - 1]);
+    }
 
-            else
-                add_to_key_buffer(result, len, CSI,
-                                  K_SECOND(vim_key_char),
-                                  K_THIRD(vim_key_char));
-
-            gui_mac_debug(@"IS_SPECIAL, add_to_input_buf: %d", len);
-        }
-
-        /* now here are normal characters */
-        else if (vim_modifiers)
-        {
-            result[len++] = original_char;
-            gui_mac_debug(@"original_char %c, add_to_input_buf: %d",
-                          original_char, len);
-        }
-
-        if (len > 0)
-        {
-            add_to_input_buf(result, len);
-            gui_mac_stop_app(YES);
-            return;
-        }
+    if (len > 0)
+    {
+        add_to_input_buf(result, len);
+        gui_mac_stop_app(YES);
+        return;
     }
 
 insert_text:
