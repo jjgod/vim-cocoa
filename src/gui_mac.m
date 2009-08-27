@@ -17,8 +17,6 @@
 #import <Cocoa/Cocoa.h>
 #import <PSMTabBarControl/PSMTabBarControl.h>
 
-#define GUI_MAC_DEBUG     1
-
 /* Internal Data Structures {{{ */
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_4
@@ -358,8 +356,6 @@ void      gui_mac_send_dummy_event();
 void      gui_mac_update();
 
 #define currentView                 ([gui_mac.current_window textView])
-#define gui_mac_begin_drawing()     [currentView beginDrawing]
-#define gui_mac_end_drawing()       [currentView endDrawing]
 #define gui_mac_begin_tab_action()  (gui_mac.selecting_tab = YES)
 #define gui_mac_end_tab_action()    (gui_mac.selecting_tab = NO)
 
@@ -390,7 +386,7 @@ int gui_mac_select_from_font_panel(char_u *font_name);
 void gui_mac_update_scrollbar(scrollbar_T *sb);
 
 #if MSG_INFO >= DEBUG_LEVEL
-#define gui_mac_info(fmt, args...) NSLog(fmt, ## args);
+#define gui_mac_info(fmt, args...) NSLog(@"%s: " fmt, __func__, ## args);
 #else
 #define gui_mac_info(fmt, args...)
 #endif
@@ -417,7 +413,7 @@ void gui_mac_update_scrollbar(scrollbar_T *sb);
 
 int gui_mch_init()
 {
-    gui_mac_debug(@"gui_mch_init: %s", exe_name);
+    gui_mac_info("%s", exe_name);
 
     gui_mac.app_pool = [NSAutoreleasePool new];
 
@@ -589,11 +585,10 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
     }
     else
     {
-        if (! NSEqualRects([currentView frame], viewRect))
-            [currentView setFrame: viewRect];
+        // if (! NSEqualRects([currentView frame], viewRect))
+        [currentView setFrame: viewRect];
 
         gui_mac.main_height = viewRect.size.height;
-        gui_mac_redraw();
 
         if ([currentView inLiveResize])
             [gui_mac.current_window setTitle:
@@ -1588,6 +1583,33 @@ struct gui_mac_drawing_op *gui_mac_queue_op(uint8_t type)
     return op;
 }
 
+const char *gui_mac_op_type(struct gui_mac_drawing_op *op)
+{
+    switch (op->type)
+    {
+    case INVERT_RECT:
+        return "INVERT_RECT";
+
+    case CLEAR_ALL:
+        return "CLEAR_ALL";
+
+    case CLEAR_BLOCK:
+        return "CLEAR_BLOCK";
+
+    case SCROLL_RECT:
+        return "SCROLL_RECT";
+
+    case DRAW_STRING:
+        return "DRAW_STRING";
+
+    case DRAW_PART_CURSOR:
+        return "DRAW_PART_CURSOR";
+
+    default:
+        return "UNKNOWN";
+    }
+}
+
 void gui_mac_flush_queue()
 {
     uint32_t i;
@@ -1692,6 +1714,7 @@ void gui_mch_clear_all()
 void gui_mac_clear_all(guicolor_T back_pixel)
 {
     gui_mch_set_bg_color(back_pixel);
+    gui_mac_info("%@", gui_mac.bg_color);
 
     [gui_mac.bg_color set];
     NSRectFill([currentView bounds]);
@@ -1701,7 +1724,6 @@ void gui_mch_clear_block(int row1, int col1, int row2, int col2)
 {
     struct gui_mac_drawing_op *op = gui_mac_queue_op(CLEAR_BLOCK);
 
-    // NSLog(@"clearBlock: (%d, %d) - (%d, %d)", row1, col1, row2, col2);
     if (op)
     {
         op->u.rect2.row1 = row1;
@@ -1715,7 +1737,7 @@ void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back
 {
     NSRect rect;
 
-    // NSLog(@"clearBlock: (%d, %d) - (%d, %d)", row1, col1, row2, col2);
+    gui_mac_debug("(%d, %d) - (%d, %d)", row1, col1, row2, col2);
     gui_mch_set_bg_color(back_pixel);
 
     rect = NSRectFromVim(row1, col1, row2, col2);
@@ -1737,12 +1759,12 @@ void gui_mch_delete_lines(int row, int num_lines)
                                           gui.scroll_region_bot,      // row2
                                           gui.scroll_region_right);   // col2
         op->u.scroll.lines = -num_lines;
-
-        gui_clear_block(gui.scroll_region_bot - num_lines + 1,
-                        gui.scroll_region_left,
-                        gui.scroll_region_bot,
-                        gui.scroll_region_right);
     }
+
+    gui_clear_block(gui.scroll_region_bot - num_lines + 1,
+                    gui.scroll_region_left,
+                    gui.scroll_region_bot,
+                    gui.scroll_region_right);
 }
 
 void gui_mch_insert_lines(int row, int num_lines)
@@ -1861,8 +1883,6 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
                          NSColor *fg_color, NSColor *bg_color, NSColor *sp_color,
                          CTFontRef font)
 {
-    // gui_mac_debug(@"gui_mac_draw_string: %d, %d, %d, %@, %@", row, col, len,
-    //            fg_color, bg_color);
     CTLineRef               line;
     CFStringRef             string;
     CFDictionaryRef         attributes;
@@ -1870,6 +1890,8 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
 
     CFStringRef keys[] = { kCTFontAttributeName, kCTForegroundColorAttributeName };
     CFTypeRef values[] = { font,                 fg_color };
+
+    gui_mac_debug("%d, %d, %d", row, col, len);
 
     // Create a CFString from the original UTF-8 string 's'
     string = CFStringCreateWithBytes(kCFAllocatorDefault,
@@ -2064,13 +2086,13 @@ const char *scrollbar_desc(scrollbar_T *sb)
 void gui_mch_create_scrollbar(scrollbar_T *sb, int orient)
 {
     gui_mac_debug(@"gui_mch_create_scrollbar: ident = %ld, "
-                "type = %s, value = %ld, size = %ld, "
-                "max = %ld, top = %d, height = %d, "
-                "width = %d, status_height = %d, %s",
-                sb->ident, scrollbar_desc(sb),
-                sb->value, sb->size, sb->max,
-                sb->top, sb->height, sb->width, sb->status_height,
-                orient == SBAR_HORIZ ? "H" : "V");
+                  "type = %s, value = %ld, size = %ld, "
+                  "max = %ld, top = %d, height = %d, "
+                  "width = %d, status_height = %d, %s",
+                  sb->ident, scrollbar_desc(sb),
+                  sb->value, sb->size, sb->max,
+                  sb->top, sb->height, sb->width, sb->status_height,
+                  orient == SBAR_HORIZ ? "H" : "V");
     VIMScroller *scroller;
 
     scroller = [[VIMScroller alloc] initWithVimScrollbar: sb
@@ -2832,12 +2854,6 @@ void gui_mac_open_window()
     return YES;
 }
 
-- (void) drawRect:(NSRect)rect
-{
-    [gui_mac.clear_color set];
-    NSRectFill(rect);
-}
-
 /* PSMTabBarControl delegate {{{2 */
 
 -        (BOOL) tabView: (NSTabView *) theTabView
@@ -3086,9 +3102,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (void) drawRect:(NSRect)rect
 {
-    gui_mac_debug(@"drawRect: (%f, %f), (%f, %f)",
-                rect.origin.x, rect.origin.y,
-                rect.size.width, rect.size.height);
+    gui_mac_debug(@"drawRect: (%f, %f), (%f, %f)", rect.origin.x,
+                  rect.origin.y, rect.size.width, rect.size.height);
 #if LIGHTWEIDHT_LIVE_RESIZE
     if ([self inLiveResize])
     {
@@ -3150,7 +3165,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (BOOL) wantsDefaultClipping
 {
-    return NO;
+    return YES;
 }
 
 - (BOOL) isFlipped
@@ -3475,6 +3490,8 @@ void gui_mac_scroll_rect(NSRect rect, int lines)
 {
     NSPoint dest_point = rect.origin;
     dest_point.y -= lines * gui.char_height;
+
+    gui_mac_info("%d", lines);
 
     NSCopyBits(0, rect, dest_point);
 }
