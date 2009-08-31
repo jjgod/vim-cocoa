@@ -3445,20 +3445,25 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 #endif
     }
 
-    if (IS_SPECIAL(vim_key_char))
+    if (IS_SPECIAL(vim_key_char) || vim_key_char > 0)
     {
         if ([self hasMarkedText])
             goto insert_text;
 
-        add_to_key_buffer(result, len, CSI,
+        if (vim_key_char > 0)
+            result[len++] = vim_key_char;
+        else
+        {
+            add_to_key_buffer(result, len, CSI,
                           K_SECOND(vim_key_char),
                           K_THIRD(vim_key_char));
 
-        gui_mac_info(@"IS_SPECIAL, add_to_input_buf: %d", vim_key_char);
+            gui_mac_info(@"IS_SPECIAL, add_to_input_buf: %d", vim_key_char);
+        }
     }
-    else
+    else if (vim_modifiers)
     {
-        result[len++] = vim_key_char > 0 ? vim_key_char : modified_char;
+        result[len++] = original_char;
         gui_mac_info(@"add_to: %d", result[len - 1]);
     }
 
