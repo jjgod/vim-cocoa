@@ -214,9 +214,9 @@ struct gui_mac_drawing_op {
             char_u *s;
             int len;
             int flags;
-            NSColor *fg_color;
-            NSColor *bg_color;
-            NSColor *sp_color;
+            guicolor_T fg_color;
+            guicolor_T bg_color;
+            guicolor_T sp_color;
             CTFontRef font;
         } str;
         struct {
@@ -228,9 +228,10 @@ struct gui_mac_drawing_op {
 };
 
 struct gui_mac_data {
-    NSColor    *fg_color, *bg_color, *sp_color, *clear_color;
+    guicolor_T  fg_color, bg_color, sp_color;
+    NSColor    *clear_color;
 
-    VIMWindow   *current_window;
+    VIMWindow  *current_window;
 
     NSFont     *current_font;
     NSFont     *selected_font;
@@ -364,7 +365,7 @@ void gui_mac_clear_all(guicolor_T back_pixel);
 void gui_mac_invert_rectangle(int r, int c, int nr, int nc);
 void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back_pixel);
 void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
-                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color,
+                         guicolor_T fg_color, guicolor_T bg_color, guicolor_T sp_color,
                          CTFontRef font);
 void gui_mac_draw_part_cursor(int w, int h, guicolor_T color);
 
@@ -1546,25 +1547,17 @@ guicolor_T gui_mch_get_color(char_u *name)
 
 void gui_mch_set_fg_color(guicolor_T color)
 {
-    gui_mac.fg_color = NSColorFromGuiColor(color, 1.0);
-
-    // TODO: should set for all views
-    [currentView setMarkedTextAttribute: gui_mac.fg_color
-                                 forKey: NSForegroundColorAttributeName];
+    gui_mac.fg_color = color;
 }
 
 void gui_mch_set_bg_color(guicolor_T color)
 {
-    gui_mac.bg_color = NSColorFromGuiColor(color, VIM_BG_ALPHA);
-
-    // TODO: should set for all views
-    [currentView setMarkedTextAttribute: gui_mac.bg_color
-                                 forKey: NSBackgroundColorAttributeName];
+    gui_mac.bg_color = color;
 }
 
 void gui_mch_set_sp_color(guicolor_T color)
 {
-    gui_mac.sp_color = NSColorFromGuiColor(color, 1.0);
+    gui_mac.sp_color = color;
 }
 
 /* Color related }}} */
@@ -1645,9 +1638,6 @@ void gui_mac_flush_queue()
                                 op->u.str.fg_color, op->u.str.bg_color,
                                 op->u.str.sp_color, op->u.str.font);
             free(op->u.str.s);
-            [op->u.str.fg_color release];
-            [op->u.str.bg_color release];
-            [op->u.str.sp_color release];
             break;
 
         case DRAW_PART_CURSOR:
@@ -1714,9 +1704,8 @@ void gui_mch_clear_all()
 void gui_mac_clear_all(guicolor_T back_pixel)
 {
     gui_mch_set_bg_color(back_pixel);
-    gui_mac_info("%@", gui_mac.bg_color);
 
-    [gui_mac.bg_color set];
+    [NSColorFromGuiColor(back_pixel, VIM_BG_ALPHA) set];
     NSRectFill([currentView bounds]);
 }
 
@@ -1743,7 +1732,7 @@ void gui_mac_clear_block(int row1, int col1, int row2, int col2, guicolor_T back
     rect = NSRectFromVim(row1, col1, row2, col2);
     // NSShowRect("clearBlock", rect);
 
-    [gui_mac.bg_color set];
+    [NSColorFromGuiColor(back_pixel, VIM_BG_ALPHA) set];
     NSRectFill(rect);
 }
 
@@ -1872,24 +1861,29 @@ void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
         op->u.str.len = len;
         op->u.str.flags = flags;
 
-        op->u.str.fg_color = [gui_mac.fg_color copy];
-        op->u.str.bg_color = [gui_mac.bg_color copy];
-        op->u.str.sp_color = [gui_mac.sp_color copy];
+        op->u.str.fg_color = gui_mac.fg_color;
+        op->u.str.bg_color = gui_mac.bg_color;
+        op->u.str.sp_color = gui_mac.sp_color;
         op->u.str.font     = (CTFontRef) gui_mac.current_font;
     }
 }
 
 void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
-                         NSColor *fg_color, NSColor *bg_color, NSColor *sp_color,
+                         guicolor_T fg_color, guicolor_T bg_color, guicolor_T sp_color,
                          CTFontRef font)
 {
     CTLineRef               line;
     CFStringRef             string;
     CFDictionaryRef         attributes;
     CFAttributedStringRef   attrString;
+    NSColor                *fgColor, *bgColor, *spColor;
+
+    fgColor = NSColorFromGuiColor(fg_color, 1.0);
+    bgColor = NSColorFromGuiColor(bg_color, VIM_BG_ALPHA);
+    spColor = NSColorFromGuiColor(sp_color, 1.0);
 
     CFStringRef keys[] = { kCTFontAttributeName, kCTForegroundColorAttributeName };
-    CFTypeRef values[] = { font,                 fg_color };
+    CFTypeRef values[] = { font,                 fgColor };
 
     gui_mac_debug("%d, %d, %d", row, col, len);
 
@@ -1957,14 +1951,14 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
 
     if (! (flags & DRAW_TRANSP))
     {
-        [bg_color set];
+        [bgColor set];
         NSRectFill(rect);
     }
 
     CGContextSetRGBFillColor(context,
-                             [fg_color redComponent],
-                             [fg_color greenComponent],
-                             [fg_color blueComponent],
+                             [fgColor redComponent],
+                             [fgColor greenComponent],
+                             [fgColor blueComponent],
                              1.0);
 
     NSPoint textOrigin = NSMakePoint(rect.origin.x,
@@ -1975,7 +1969,7 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
 
     if (flags & DRAW_UNDERL)
     {
-        [sp_color set];
+        [spColor set];
         NSRectFill(NSMakeRect(rect.origin.x,
                               rect.origin.y + VIM_UNDERLINE_OFFSET,
                               rect.size.width, VIM_UNDERLINE_HEIGHT));
@@ -1983,7 +1977,7 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
 
     if (flags & DRAW_UNDERC)
     {
-        [sp_color set];
+        [spColor set];
 
         float line_end_x = rect.origin.x + rect.size.width;
         int i = 0;
@@ -2357,10 +2351,10 @@ NSColor *NSColorFromGuiColor(guicolor_T color, float alpha)
     green = (float) Green(color) / (float) 0xFF;
     blue  = (float) Blue(color) / (float) 0xFF;
 
-    return [NSColor colorWithDeviceRed: red
-                                 green: green
-                                  blue: blue
-                                 alpha: alpha];
+    return [NSColor colorWithCalibratedRed: red
+                                     green: green
+                                      blue: blue
+                                     alpha: alpha];
 }
 
 NSRect NSRectFromVim(int row1, int col1, int row2, int col2)
