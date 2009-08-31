@@ -1911,6 +1911,7 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
     CFRelease(attributes);
 
     line = CTLineCreateWithAttributedString(attrString);
+    CFRelease(attrString);
     if (! line)
         return;
 
