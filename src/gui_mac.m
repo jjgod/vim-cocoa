@@ -112,13 +112,9 @@ static struct
 {
     NSRange              markedRange;
     NSRange              selectedRange;
-    NSAttributedString  *markedText;
-    NSMutableDictionary *markedTextAttributes;
     NSString            *lastSetTitle;
 }
 
-- (NSAttributedString *) markedText;
-- (void) setMarkedTextAttribute:(id)value forKey:(NSString *)key;
 - (void) mouseAction:(int)button repeated:(bool)repeated event:(NSEvent *)event;
 
 @end
@@ -864,8 +860,6 @@ void gui_mch_free_font(GuiFont font)
 void gui_mch_set_font(GuiFont font)
 {
     gui_mac.current_font = (NSFont *) font;
-    [currentView setMarkedTextAttribute: gui_mac.current_font
-                                 forKey: NSFontAttributeName];
 }
 
 GuiFont gui_mch_get_font(char_u *name, int giveErrorIfMissing)
@@ -2900,13 +2894,6 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 - (id) initWithFrame:(NSRect)rect
 {
     if ((self = [super initWithFrame: rect])) {
-        markedText = nil;
-        markedTextAttributes = [[NSMutableDictionary dictionaryWithObjectsAndKeys:
-                                    [NSNumber numberWithInt: (NSUnderlineStyleSingle |
-                                                              NSUnderlinePatternSolid)],
-                                    NSUnderlineStyleAttributeName,
-                                    nil] retain];
-
         [self registerForDraggedTypes: [NSArray arrayWithObjects:
                     NSFilenamesPboardType, NSStringPboardType, nil]];
 
@@ -2934,22 +2921,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (void) dealloc
 {
-    [markedTextAttributes release];
-    [markedText release];
     [lastSetTitle release];
-
     [super dealloc];
-}
-
-- (NSAttributedString *) markedText
-{
-    return markedText;
-}
-
-- (void) setMarkedTextAttribute:(id)value forKey:(NSString *)key
-{
-    [markedTextAttributes setObject: value
-                             forKey: key];
 }
 
 - (BOOL) isOpaque
@@ -2974,24 +2947,36 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 - (void) setMarkedText:(id)aString selectedRange:(NSRange)selRange
 {
-    // gui_mac_debug(@"setMarkedText: %@ (%u, %u)", aString,
-    //             selRange.location, selRange.length);
+    NSString *markedText;
 
-    markedRange = NSMakeRange(0, [aString length]);
-
-    [markedText release];
     if ([aString isKindOfClass: [NSAttributedString class]])
-        markedText = [[NSAttributedString alloc] initWithString: [aString string]
-                                                     attributes: markedTextAttributes];
+        markedText = [aString string];
     else
-        markedText = [[NSAttributedString alloc] initWithString: aString
-                                                     attributes: markedTextAttributes];
+        markedText = aString;
 
     if (markedRange.length > 0)
     {
-    } else
+        gui_redraw_block(gui_mac.im_row, gui_mac.im_col,
+                         gui_mac.im_row, gui_mac.im_col + markedRange.length,
+                         GUI_MON_NOCLEAR);
+    }
+
+    gui_mac_info(@"setMarkedText: %@ (%u, %u)", markedText,
+                 selRange.location, selRange.length);
+
+    markedRange = NSMakeRange(0, [markedText length]);
+
+    if (markedRange.length > 0)
     {
-        // gui_mac_debug(@"clear markedText");
+        const char *str = [markedText UTF8String];
+        int len = strlen(str);
+
+        gui_mch_draw_string(gui_mac.im_row, gui_mac.im_col,
+                            (char_u *) str, len, DRAW_UNDERL);
+    }
+    else
+    {
+        gui_mac_info(@"clear markedText");
         gui_update_cursor(TRUE, FALSE);
     }
 
@@ -3056,7 +3041,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     size_t  u16_len, enc_len, result_len = 0;
     char_u  result[INLINE_KEY_BUFFER_SIZE];
 
-    // gui_mac_debug(@"insertText: %@", aString);
+    gui_mac_info(@"insertText: %@", aString);
 
     u16_len = [aString length] * 2;
     text = (unichar *) alloc(u16_len);
@@ -3082,9 +3067,11 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     vim_free(to);
 
     /* clear marked text */
+    if (markedRange.length > 0)
+        gui_mch_clear_block(gui_mac.im_row, gui_mac.im_col,
+                            gui_mac.im_row, gui_mac.im_col + markedRange.length);
+
     markedRange = NSMakeRange(NSNotFound, 0);
-    [markedText release];
-    markedText = nil;
 
     if (result_len > 0)
     {
@@ -3093,69 +3080,13 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     }
 }
 
-#define LIGHT_WEIGHT_LIVE_RESIZE    0
-
 - (void) drawRect:(NSRect)rect
 {
     gui_mac_debug(@"drawRect: (%f, %f), (%f, %f)", rect.origin.x,
                   rect.origin.y, rect.size.width, rect.size.height);
-#if LIGHTWEIDHT_LIVE_RESIZE
-    if ([self inLiveResize])
-    {
-        NSFont *font;
-        NSString *size_desc;
-        NSDictionary *attrib;
 
-        [NSColorFromGuiColor(gui.back_pixel, VIM_BG_ALPHA) set];
-        [NSBezierPath fillRect: rect];
-
-        font = [NSFont boldSystemFontOfSize: 48.0];
-
-        size_desc = [NSString stringWithFormat: @"%d x %d (%d x %d)",
-                        (int) rect.size.width,
-                        (int) rect.size.height,
-                        (int) rect.size.width / gui.char_width,
-                        (int) rect.size.height / gui.char_height];
-        attrib = [NSDictionary dictionaryWithObjectsAndKeys:
-                    [NSColor whiteColor], NSForegroundColorAttributeName,
-                    font, NSFontAttributeName, nil];
-
-        NSSize desc_size = [size_desc sizeWithAttributes: attrib];
-
-        [size_desc drawAtPoint: NSMakePoint(rect.size.width / 2 - desc_size.width / 2,
-                                            rect.size.height / 2 - desc_size.height / 2)
-                withAttributes: attrib];
-        return;
-    }
-    else
-    {
-#endif
-        gui_mac_flush_queue();
-
-        if ([self hasMarkedText])
-        {
-            gui_mac_debug(@"redraw: %@", markedText);
-
-            NSSize markedSize = [markedText size];
-            NSColor *markedBackground = [markedText attribute: NSBackgroundColorAttributeName
-                                                      atIndex: 0
-                                               effectiveRange: NULL];
-            NSFont *markedFont = [markedText attribute: NSFontAttributeName
-                                                      atIndex: 0
-                                               effectiveRange: NULL];
-            NSPoint cursorPoint = NSMakePoint(FILL_X(gui_mac.im_col),
-                                              FILL_Y(gui_mac.im_row + 1) - [markedFont leading]);
-            NSPoint markedPoint = FLIPPED_POINT(self, cursorPoint);
-
-            [markedBackground set];
-            NSRectFill(NSMakeRect(markedPoint.x, markedPoint.y - [markedFont leading],
-                                  markedSize.width, gui.char_height));
-
-            [markedText drawAtPoint: markedPoint];
-        }
-#if LIGHTWEIDHT_LIVE_RESIZE
-    }
-#endif
+    // Do the actual drawing here
+    gui_mac_flush_queue();
 }
 
 - (BOOL) wantsDefaultClipping
