@@ -34,10 +34,10 @@ else (NOT APPLE)
 endif (APPLE)
 
 if (CMAKE_COMPILER_IS_GNUCC)
-  set(CMAKE_C_FLAGS_DEBUG "-g -Wall -Werror")
+  set(CMAKE_C_FLAGS_DEBUG "-g -Wall -Werror -mmacosx-version-min=10.5")
   set(CMAKE_C_FLAGS_RELEASE "-O2 -pipe -fomit-frame-pointer -g -Wall -mmacosx-version-min=10.5")
   set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-mmacosx-version-min=10.5")
+  set(CMAKE_EXE_LINKER_FLAGS "-mmacosx-version-min=10.5")
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 find_path(PYTHON_INCLUDE_DIR Python.h)
