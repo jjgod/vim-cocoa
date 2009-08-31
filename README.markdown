@@ -35,7 +35,15 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
-### 0.4
+### 0.4 beta 2
+
+* Support sudden termination in Snow Leopard
+* Fix font selection issue introduced in previous build
+* Fix some text input and keyboard handling issues (reported by riobard)
+* Fix various clear/redraw issues
+* Fix a memory leak in string drawing
+
+### 0.4 beta 1
 
 * Greatly improved performance, especially visible in Snow Leopard
 * Improve startup experience
