@@ -3321,18 +3321,19 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
         got_int = TRUE;
     }
 
-    gui_mac_debug(@"original_char %d, modified_char: %d",
-                  original_char, modified_char);
+    gui_mac_info(@"original_char %d, modified_char: %d",
+                 original_char, modified_char);
 
     /* hmm, have to hard-coded this? */
     vim_key_char = gui_mac_function_key_to_vim(original_char, vim_modifiers);
 
-    should_remove_ctrl = (! vim_key_char && modified_char < 0x20) ? YES : NO;
+    should_remove_ctrl = (! vim_key_char && original_char != modified_char) ? YES : NO;
     if (vim_key_char !=
         gui_mac_function_key_to_vim(original_char, vim_modifiers & ~MOD_MASK_CTRL))
         should_remove_ctrl = YES;
 
-    gui_mac_debug(@"vim_key_char: %d, K_RIGHT = %d", vim_key_char, K_RIGHT);
+    gui_mac_info(@"vim_key_char: %d, should_remove_ctrl = %s",
+                 vim_key_char, should_remove_ctrl ? "YES" : "NO");
 
     switch (vim_modifiers)
     {
@@ -3383,9 +3384,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
             gui_mac_info(@"IS_SPECIAL, add_to_input_buf: %d", vim_key_char);
         }
     }
-    else if (vim_modifiers)
+    else if (vim_modifiers || should_remove_ctrl)
     {
-        result[len++] = original_char;
+        result[len++] = should_remove_ctrl ? modified_char : original_char;
         gui_mac_info(@"add_to: %d", result[len - 1]);
     }
 
