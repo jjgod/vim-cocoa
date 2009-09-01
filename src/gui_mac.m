@@ -16,6 +16,7 @@
 #include "vim.h"
 #import <Cocoa/Cocoa.h>
 #import <PSMTabBarControl/PSMTabBarControl.h>
+#import <Carbon/Carbon.h>
 
 /* Internal Data Structures {{{ */
 
@@ -262,6 +263,8 @@ struct gui_mac_data {
 
     VimAppController  *app_delegate;
     NSAutoreleasePool *app_pool;
+
+    TISInputSourceRef last_im_source, ascii_im_source;
 } gui_mac;
 
 #define FLIPPED_RECT(view, rect)    NSMakeRect(rect.origin.x, \
@@ -454,14 +457,17 @@ int gui_mch_init()
     gui_mac.selecting_tab  = NO;
     gui_mac.window_at_front  = NO;
     gui_mac.queued_ops     = 0;
-    gui_mac.clear_color    = [[NSColor whiteColor] retain];
+
+    gui_mac.last_im_source = NULL;
+    // get an ASCII source for use when IM is deactivated (by Vim)
+    gui_mac.ascii_im_source = TISCopyCurrentASCIICapableKeyboardInputSource();
 
     return OK;
 }
 
 int gui_mch_init_check()
 {
-    gui_mac_debug(@"gui_mch_init_check");
+    gui_mac_debug("");
 
     /* see main.c for reason to disallow */
     if (disallow_gui)
@@ -472,7 +478,19 @@ int gui_mch_init_check()
 
 void gui_mch_exit(int rc)
 {
-    gui_mac_debug(@"gui_mch_exit\n");
+    gui_mac_debug("");
+
+    if (gui_mac.ascii_im_source)
+    {
+        CFRelease(gui_mac.ascii_im_source);
+        gui_mac.ascii_im_source = NULL;
+    }
+
+    if (gui_mac.last_im_source)
+    {
+        CFRelease(gui_mac.last_im_source);
+        gui_mac.last_im_source = NULL;
+    }
 
     [gui_mac.last_mouse_down_event release];
     [gui_mac.selected_file release];
@@ -685,11 +703,28 @@ int im_get_status()
 
 void im_set_active(int active)
 {
+    gui_mac_debug("%d", active);
+
+    TISInputSourceRef to_select = NULL;
+
+    if (active)
+        to_select = gui_mac.last_im_source;
+    else
+    {
+        if (gui_mac.last_im_source)
+            CFRelease(gui_mac.last_im_source);
+
+        gui_mac.last_im_source = TISCopyCurrentKeyboardInputSource();
+        to_select = gui_mac.ascii_im_source;
+    }
+
+    if (to_select)
+        TISSelectInputSource(to_select);
 }
 
 void im_set_position(int row, int col)
 {
-    gui_mac_debug(@"im_set_position: (%d, %d)", row, col);
+    gui_mac_debug("(%d, %d)", row, col);
     gui_mac.im_row = row;
     gui_mac.im_col = col;
 }
