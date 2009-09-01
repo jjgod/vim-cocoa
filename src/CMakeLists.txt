@@ -3,13 +3,13 @@
 cmake_minimum_required(VERSION 2.6)
 project(VIM)
 
-set(CMAKE_C_COMPILER "clang")
 set(VIMMAJOR 7)
 set(VIMMINOR 2)
 set(VIM_VERSION "${VIMMAJOR}.${VIMMINOR}")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
+    set(CMAKE_C_COMPILER "clang")
 endif (NOT CMAKE_BUILD_TYPE)
 
 if (NOT GUI)

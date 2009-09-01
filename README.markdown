@@ -35,6 +35,11 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.4
+
+* Improve input method switching support
+* Fix Ctrl key handling
+
 ### 0.4 beta 2
 
 * Support sudden termination in Snow Leopard
