@@ -3,12 +3,13 @@
 cmake_minimum_required(VERSION 2.6)
 project(VIM)
 
+set(CMAKE_C_COMPILER "clang")
 set(VIMMAJOR 7)
 set(VIMMINOR 2)
 set(VIM_VERSION "${VIMMAJOR}.${VIMMINOR}")
 
 if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Release")
+    set(CMAKE_BUILD_TYPE "Debug")
 endif (NOT CMAKE_BUILD_TYPE)
 
 if (NOT GUI)
@@ -34,21 +35,19 @@ else (NOT APPLE)
 endif (APPLE)
 
 if (CMAKE_COMPILER_IS_GNUCC)
-  set(CMAKE_C_FLAGS_DEBUG "-g -Wall -Werror -mmacosx-version-min=10.5")
-  set(CMAKE_C_FLAGS_RELEASE "-O2 -pipe -fomit-frame-pointer -g -Wall -mmacosx-version-min=10.5")
+  set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror -mmacosx-version-min=10.5")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -pipe -fomit-frame-pointer -Wall -mmacosx-version-min=10.5")
   set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk")
-  set(CMAKE_EXE_LINKER_FLAGS "-mmacosx-version-min=10.5")
+  # cmake will pass CFLAGS to linker, so we need clang to omit warnings for -Wall, -Werror, etc.
+  set(CMAKE_EXE_LINKER_FLAGS "-Qunused-arguments")
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 find_path(PYTHON_INCLUDE_DIR Python.h)
 find_path(RUBY_INCLUDE_DIR   ruby.h HINTS "/System/Library/Frameworks")
-find_path(COCOA_INCLUDE_DIR  Cocoa/Cocoa.h)
-find_path(PSMTBC_INCLUDE_DIR PSMTabBarControl/PSMTabBarControl.h ${VIM_SOURCE_DIR}/mac)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR}
                     ${VIM_SOURCE_DIR} ${VIM_SOURCE_DIR}/proto
-                    ${PYTHON_INCLUDE_DIR} ${RUBY_INCLUDE_DIR}
-                    ${COCOA_INCLUDE_DIR} ${PSMTBC_INCLUDE_DIR})
+                    ${PYTHON_INCLUDE_DIR} ${RUBY_INCLUDE_DIR})
 
 # -DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA
 add_definitions(-DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -DMACOS_X_UNIX
@@ -87,13 +86,14 @@ set(VIM_SOURCES version.c buffer.c charset.c diff.c digraph.c edit.c eval.c
 
 # Simply treat it as C source should be fine, otherwise cmake will choose
 # a C++ compiler to build it
-set_source_files_properties(gui_mac.m PROPERTIES LANGUAGE C)
+set_source_files_properties(gui_mac.m os_macosx.m PROPERTIES LANGUAGE C)
 
 find_library(m m)
 find_library(ncurses ncurses)
 find_library(iconv iconv)
 
 find_library(COCOA_FRAMEWORK  Cocoa)
+find_library(CARBON_FRAMEWORK Carbon)
 find_library(PYTHON_FRAMEWORK Python)
 find_library(RUBY_FRAMEWORK   Ruby)
 
@@ -101,7 +101,7 @@ set(PSMTBC_PATH ${VIM_SOURCE_DIR}/mac)
 find_library(PSMTBC_FRAMEWORK PSMTabBarControl ${PSMTBC_PATH})
 
 set(VIM_LIBRARIES ${m} ${ncurses} ${iconv}
-    ${COCOA_FRAMEWORK} ${PSMTBC_FRAMEWORK} ${PYTHON_FRAMEWORK} ${RUBY_FRAMEWORK})
+    ${COCOA_FRAMEWORK} ${PSMTBC_FRAMEWORK} ${CARBON_FRAMEWORK} ${PYTHON_FRAMEWORK} ${RUBY_FRAMEWORK})
 
 file(GLOB ICON_FILES os_mac_rsrc/*.icns)
 set_source_files_properties(${ICON_FILES} PROPERTIES
