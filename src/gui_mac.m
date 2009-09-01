@@ -225,7 +225,6 @@ struct gui_mac_drawing_op {
 
 struct gui_mac_data {
     guicolor_T  fg_color, bg_color, sp_color;
-    NSColor    *clear_color;
 
     VIMWindow  *current_window;
 
@@ -487,7 +486,7 @@ void gui_mch_exit(int rc)
 
 int gui_mch_open()
 {
-    gui_mac_debug(@"gui_mch_open: %d %d", gui_win_x, gui_win_y);
+    gui_mac_debug("%d %d", gui_win_x, gui_win_y);
 
     gui_mac_open_window();
 
@@ -503,7 +502,7 @@ void gui_mch_prepare(int *argc, char **argv)
 
     NSString *path = [[NSBundle mainBundle] executablePath];
 
-    gui_mac_debug(@"gui_mch_prepare: %@", path);
+    gui_mac_debug("%@", path);
 
     exe_name = vim_strsave((char_u *) [path fileSystemRepresentation]);
 
@@ -1683,9 +1682,6 @@ void gui_mch_flash(int msec)
 void gui_mch_clear_all()
 {
     gui_mac_queue_op(CLEAR_ALL);
-    [gui_mac.clear_color release];
-    gui_mac.clear_color = NSColorFromGuiColor(gui.back_pixel, VIM_BG_ALPHA);
-    [gui_mac.clear_color retain];
 
     // Show the window after first clear all
     if (! gui_mac.window_at_front)
@@ -3309,7 +3305,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     /* convert NS* style modifier flags to vim style */
     vim_modifiers = gui_mac_key_modifiers_to_vim(mac_modifiers);
 
-    gui_mac_debug(@"keyDown: characters = %d", [[event characters] length]);
+    gui_mac_info(@"keyDown: characters = %d", [[event characters] length]);
 
     if ([[event characters] length] != 1)
         goto insert_text;
