@@ -3120,8 +3120,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
     /* clear marked text */
     if (markedRange.length > 0)
-        gui_mch_clear_block(gui_mac.im_row, gui_mac.im_col,
-                            gui_mac.im_row, gui_mac.im_col + markedRange.length);
+        gui_redraw_block(gui_mac.im_row, gui_mac.im_col,
+                         gui_mac.im_row, gui_mac.im_col + markedRange.length,
+                         GUI_MON_NOCLEAR);
 
     markedRange = NSMakeRange(NSNotFound, 0);
 
