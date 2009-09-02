@@ -712,8 +712,14 @@ int im_get_status()
     if (! gui.in_use)
             return 0;
 
-    return KeyboardInputSourcesEqual(gui_mac.last_im_source,
-                                     gui_mac.ascii_im_source) == NO ? 1 : 0;
+    TISInputSourceRef current = TISCopyCurrentKeyboardInputSource();
+    int ret = 0;
+
+    ret = KeyboardInputSourcesEqual(current,
+                                    gui_mac.ascii_im_source) == NO ? 1 : 0;
+
+    CFRelease(current);
+    return ret;
 }
 
 void im_set_active(int active)
