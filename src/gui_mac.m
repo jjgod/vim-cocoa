@@ -693,12 +693,27 @@ int gui_mch_wait_for_chars(int wtime)
 
 /* Input Method Handling {{{ */
 
+static BOOL KeyboardInputSourcesEqual(TISInputSourceRef a, TISInputSourceRef b)
+{
+    // Define two sources to be equal iff both are non-NULL and they have
+    // identical source ID strings.
+
+    if (!(a && b))
+        return NO;
+
+    NSString *as = TISGetInputSourceProperty(a, kTISPropertyInputSourceID);
+    NSString *bs = TISGetInputSourceProperty(b, kTISPropertyInputSourceID);
+
+    return [as isEqualToString:bs];
+}
+
 int im_get_status()
 {
     if (! gui.in_use)
             return 0;
 
-    return 0;
+    return KeyboardInputSourcesEqual(gui_mac.last_im_source,
+                                     gui_mac.ascii_im_source) == NO ? 1 : 0;
 }
 
 void im_set_active(int active)
