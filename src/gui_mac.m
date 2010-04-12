@@ -267,11 +267,6 @@ struct gui_mac_data {
     TISInputSourceRef last_im_source, ascii_im_source;
 } gui_mac;
 
-#define FLIPPED_RECT(view, rect)    NSMakeRect(rect.origin.x, \
-                                        [view frame].size.height - \
-                                            rect.origin.y - rect.size.height, \
-                                        rect.size.width, \
-                                        rect.size.height)
 #define FLIPPED_POINT(view, point)  NSMakePoint(point.x, \
                                         [view frame].size.height - point.y)
 
