@@ -17,6 +17,7 @@
 #import <Cocoa/Cocoa.h>
 #import <PSMTabBarControl/PSMTabBarControl.h>
 #import <Carbon/Carbon.h>
+#import <sys/queue.h>
 
 /* Internal Data Structures {{{ */
 
@@ -255,8 +256,8 @@ struct gui_mac_data {
     BOOL        selecting_tab;
     BOOL        window_at_front;
 
-    struct gui_mac_drawing_op ops[VIM_MAX_DRAW_OP_QUEUE];
-    uint32_t    queued_ops;
+    struct gui_mac_drawing_op *ops;
+    uint32_t    max_ops, queued_ops;
 
     CGSize      single_advances[VIM_MAX_COL_LEN];
     CGSize      double_advances[VIM_MAX_COL_LEN];
@@ -449,13 +450,25 @@ int gui_mch_init()
     gui_mac.input_received = NO;
     gui_mac.initialized    = NO;
     gui_mac.showing_tabline = NO;
-    gui_mac.selecting_tab  = NO;
-    gui_mac.window_at_front  = NO;
-    gui_mac.queued_ops     = 0;
+    gui_mac.selecting_tab   = NO;
+    gui_mac.window_at_front = NO;
+    gui_mac.max_ops         = VIM_MAX_DRAW_OP_QUEUE;
+    gui_mac.ops             = calloc(gui_mac.max_ops,
+                                     sizeof(struct gui_mac_drawing_op));
+    gui_mac.queued_ops      = 0;
 
     gui_mac.last_im_source = NULL;
     // get an ASCII source for use when IM is deactivated (by Vim)
-    gui_mac.ascii_im_source = TISCopyCurrentASCIICapableKeyboardInputSource();
+    gui_mac.ascii_im_source = TISCopyCurrentKeyboardInputSource();
+
+    CFBooleanRef isASCIICapable =
+        TISGetInputSourceProperty(gui_mac.ascii_im_source,
+                                  kTISPropertyInputSourceIsASCIICapable);
+    if (! CFBooleanGetValue(isASCIICapable))
+    {
+        CFRelease(gui_mac.ascii_im_source);
+        gui_mac.ascii_im_source = TISCopyCurrentASCIICapableKeyboardInputSource();
+    }
 
     return OK;
 }
@@ -475,6 +488,7 @@ void gui_mch_exit(int rc)
 {
     gui_mac_debug("");
 
+    free(gui_mac.ops);
     if (gui_mac.ascii_im_source)
     {
         CFRelease(gui_mac.ascii_im_source);
@@ -611,7 +625,7 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
 
 void gui_mch_update()
 {
-    // gui_mch_wait_for_chars(0);
+    gui_mac_redraw();
 }
 
 /* wtime < 0: wait forever
@@ -699,7 +713,7 @@ static BOOL KeyboardInputSourcesEqual(TISInputSourceRef a, TISInputSourceRef b)
     NSString *as = TISGetInputSourceProperty(a, kTISPropertyInputSourceID);
     NSString *bs = TISGetInputSourceProperty(b, kTISPropertyInputSourceID);
 
-    return [as isEqualToString:bs];
+    return [as isEqualToString: bs];
 }
 
 int im_get_status()
@@ -719,7 +733,7 @@ int im_get_status()
 
 void im_set_active(int active)
 {
-    gui_mac_debug("%d", active);
+    gui_mac_debug(@"%d", active);
 
     TISInputSourceRef to_select = NULL;
 
@@ -1610,8 +1624,12 @@ void gui_mch_set_sp_color(guicolor_T color)
 
 struct gui_mac_drawing_op *gui_mac_queue_op(uint8_t type)
 {
-    if (gui_mac.queued_ops >= VIM_MAX_DRAW_OP_QUEUE - 1)
-        return NULL;
+    if (gui_mac.queued_ops >= gui_mac.max_ops)
+    {
+        gui_mac.max_ops *= 2;
+        gui_mac.ops = realloc(gui_mac.ops,
+                              gui_mac.max_ops * sizeof(struct gui_mac_drawing_op));
+    }
 
     struct gui_mac_drawing_op *op = &gui_mac.ops[gui_mac.queued_ops++];
 
