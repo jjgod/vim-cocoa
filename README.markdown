@@ -35,6 +35,13 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.4.2
+
+* Fix a drawing buffer overflow issue (reported by fishy)
+* Fix an issue on ASCII capable input source switching (reported by xiedebao)
+* Show vim-cocoa version in `:version` and About dialog.
+* Updated vim to 7.2.411.
+
 ### 0.4
 
 * Improve input method switching support

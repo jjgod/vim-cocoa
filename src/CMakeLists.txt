@@ -5,7 +5,8 @@ project(VIM)
 
 set(VIMMAJOR 7)
 set(VIMMINOR 2)
-set(VIM_VERSION "${VIMMAJOR}.${VIMMINOR}")
+set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}")
+set(VIM_COCOA_VERSION "0.4.2")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
@@ -118,7 +119,7 @@ set(VIM_DEFAULT_VIM_DIR         "${VIM_PREFIX}/${PROGNAME}${VIM_DIR_PATH}")
 set(VIM_DEFAULT_VIMRUNTIME_DIR  "")
 
 # How to get these two variables remains to be a question
-set(VIM_ALL_CFLAGS              "<Not available in cmake build>")
+set(VIM_ALL_CFLAGS              "vim-cocoa ${VIM_COCOA_VERSION}")
 set(VIM_ALL_LFLAGS              "<Not available in cmake build>")
 
 set(VIM_COMPILED_USER           ${COMPILED_BY})
@@ -133,7 +134,8 @@ configure_file(pathdef.c.in ${PATHDEF_SOURCE} ESCAPE_QUOTES)
 configure_file(config.h.cmakein ${CONFIG_H} ESCAPE_QUOTES)
 
 # Variables for app bundle Info.plist generation
-set(MACOSX_BUNDLE_BUNDLE_VERSION ${VIM_VERSION})
+set(MACOSX_BUNDLE_BUNDLE_VERSION ${VIM_COCOA_VERSION})
+set(MACOSX_BUNDLE_VERSION_STRING ${VIM_VERSION})
 set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.vim.Vim-${VIM_VERSION}")
 set(MACOSX_BUNDLE_BUNDLE_NAME    "Vim")
 set(MACOSX_BUNDLE_ICON_FILE      "app.icns")
