@@ -97,6 +97,13 @@ static struct
 #define FT_Y(row)               (gui_mac.main_height - TEXT_Y(row))
 #define VIM_BG_ALPHA            ((100 - p_transp) / 100.0)
 
+#define kVIMWindowStyle         (NSTitledWindowMask | \
+                         NSMiniaturizableWindowMask | \
+                               NSClosableWindowMask | \
+                              NSResizableWindowMask | \
+                 NSUnifiedTitleAndToolbarWindowMask | \
+                     NSTexturedBackgroundWindowMask)
+
 /* A simple view to make setting text area, scrollbar position inside
  * vim window easier */
 @interface VIMContentView: NSView {
@@ -349,6 +356,7 @@ void      gui_mac_open_window();
 void      gui_mac_set_application_menu();
 void      gui_mac_send_dummy_event();
 void      gui_mac_update();
+void      gui_mac_size_changed();
 
 #define currentView                 ([gui_mac.current_window textView])
 #define gui_mac_begin_tab_action()  (gui_mac.selecting_tab = YES)
@@ -546,7 +554,8 @@ void gui_mch_set_shellsize(
     int direction)
 {
     NSWindow *window = gui_mac_get_window(NSMakeRect(0, 0, width, height));
-    NSRect contentRect = [window contentRectForFrameRect: [window frame]];
+    NSRect frame = [window frame];
+    NSRect contentRect = [window contentRectForFrameRect: frame];
 
     /* keep the top left corner not change */
     contentRect.origin.y += contentRect.size.height - height;
@@ -554,18 +563,21 @@ void gui_mch_set_shellsize(
     contentRect.size.height = height;
 
     gui_mac_debug(@"gui_mch_set_shellsize: "
-                "(%d, %d, %d, %d, %d, %d, %d)\n",
-                width, height, min_width, min_height,
-                base_width, base_height, direction);
+                  "(%d, %d, %d, %d, %d, %d, %d)\n",
+                  width, height, min_width, min_height,
+                  base_width, base_height, direction);
 
     gui_mac_debug(@"gui.num_rows (%d) * gui.char_height (%d) = %d",
-                gui.num_rows, gui.char_height, gui.num_rows * gui.char_height);
+                  gui.num_rows, gui.char_height, gui.num_rows * gui.char_height);
 
     gui_mac_debug(@"gui.num_cols (%d) * gui.char_width (%d) = %d",
-                gui.num_cols, gui.char_width, gui.num_cols * gui.char_width);
+                  gui.num_cols, gui.char_width, gui.num_cols * gui.char_width);
 
-    NSRect frame = [window frameRectForContentRect: contentRect];
-    [window setFrame: frame display: NO];
+    frame = [window frameRectForContentRect: contentRect];
+    if (! NSEqualRects([window frame], frame))
+    {
+        [window setFrame: frame display: NO];
+    }
 }
 
 void gui_mch_set_text_area_pos(int x, int y, int w, int h)
@@ -579,8 +591,8 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
     exph = y + h + (gui.which_scrollbars[SBAR_BOTTOM] ? gui.scrollbar_height : 0);
 
     gui_mac_debug(@"gui_mch_set_text_area_pos: "
-                "%d, %d, %d, %d, height = %d, exph = %d, w = %d, expw = %d",
-                x, y, w, h, height, exph, width, expw);
+                  "%d, %d, %d, %d, height = %d, exph = %d, w = %d, expw = %d",
+                  x, y, w, h, height, exph, width, expw);
 
     if (height > exph || width > expw)
     {
@@ -588,9 +600,13 @@ void gui_mch_set_text_area_pos(int x, int y, int w, int h)
         rect.size.height = exph;
 
         NSRect frame = [window frameRectForContentRect: rect];
+        NSRect oldFrame = [window frame];
         NSRect visibleFrame = [[NSScreen mainScreen] visibleFrame];
 
-        frame.origin.y = visibleFrame.origin.y + visibleFrame.size.height - frame.origin.y;
+        frame.origin.x = oldFrame.origin.x;
+        frame.origin.y = oldFrame.origin.y + oldFrame.size.height - frame.size.height;
+        if (frame.origin.y < visibleFrame.origin.y)
+            frame.origin.y = visibleFrame.origin.y;
 
         [window setFrame: frame display: NO];
     }
@@ -765,15 +781,14 @@ void im_set_position(int row, int col)
 
 void gui_mch_get_screen_dimensions(int *screen_w, int *screen_h)
 {
-    CGRect rect;
-
-    rect = CGDisplayBounds(CGMainDisplayID());
+    NSRect rect = [NSWindow contentRectForFrameRect: [[NSScreen mainScreen] visibleFrame]
+                                          styleMask: kVIMWindowStyle];
 
     *screen_w = (int) rect.size.width;
     *screen_h = (int) rect.size.height;
 
     gui_mac_debug(@"gui_mch_get_screen_dimensions: %d, %d",
-                *screen_w, *screen_h);
+                  *screen_w, *screen_h);
 }
 
 #ifdef USE_MCH_ERRMSG
@@ -977,12 +992,7 @@ int gui_mch_adjust_charheight()
 
 - (id) initWithContentRect:(NSRect)contentRect
 {
-    unsigned int windowStyle = NSTitledWindowMask |
-                       NSMiniaturizableWindowMask |
-                             NSClosableWindowMask |
-                            NSResizableWindowMask |
-               NSUnifiedTitleAndToolbarWindowMask |
-                   NSTexturedBackgroundWindowMask;
+    unsigned int windowStyle = kVIMWindowStyle;
 
     // NSShowRect("VIMWindow initWithContentRect", contentRect);
     if ([super initWithContentRect: contentRect
@@ -2292,7 +2302,6 @@ void gui_mch_show_tabline(int showit)
     gui_mac_debug(@"gui_mch_show_tabline: %s", showit ? "YES" : "NO");
     view = [gui_mac.current_window contentView];
     [[view tabBarControl] setHidden: (showit ? NO : YES)];
-    // NSShowRect("tabBarControl", [[view tabBarControl] frame]);
 }
 
 int gui_mch_showing_tabline()
@@ -2701,9 +2710,6 @@ finish:
 
 - (void) windowDidResize:(NSNotification *)aNotification
 {
-    NSSize size;
-    int width, height;
-
     if ([aNotification object] != gui_mac.current_window)
         return;
 
@@ -2713,14 +2719,7 @@ finish:
     if (! [gui_mac.current_window textView])
         return;
 
-    size   = [[gui_mac.current_window contentView] frame].size;
-    width  = (int) size.width;
-    height = (int) size.height;
-
-    gui_mac_debug(@"windowDidResize: (%d, %d)", width, height);
-    gui_resize_shell(width, height);
-
-    gui_mac_update();
+    gui_mac_size_changed();
 }
 
 - (void) windowDidMove:(NSNotification *)notification
@@ -2841,6 +2840,17 @@ void gui_mac_open_window()
         [window center];
     else
         [window setFrameTopLeftPoint: topLeft];
+}
+
+/* The window size or content view size may have changed, resize shell */
+void gui_mac_size_changed()
+{
+    NSSize size = [[gui_mac.current_window contentView] frame].size;
+    int width   = (int) size.width;
+    int height  = (int) size.height;
+
+    gui_resize_shell(width, height);
+    gui_mac_update();
 }
 
 /* Window related Utilities 2}}} */
