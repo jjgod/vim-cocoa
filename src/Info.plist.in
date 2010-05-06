@@ -42,10 +42,6 @@
 			<key>x86_64</key>
 			<string>10.6.0</string>
 		</dict>
-
-		<key>NSSupportsSuddenTermination</key>
-		<string>YES</string>
-
 		<key>CFBundleDocumentTypes</key>
 		<array>
 			<dict>
