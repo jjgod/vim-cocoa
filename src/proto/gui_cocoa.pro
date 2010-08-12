@@ -81,6 +81,8 @@ void gui_mch_lose_selection __ARGS((void));
 int gui_mch_own_selection __ARGS((void));
 void gui_mch_clear_selection __ARGS((void));
 
+void gui_mch_mousehide __ARGS((int hide));
+
 void clip_mch_lose_selection __ARGS((VimClipboard *cbd));
 void clip_mch_request_selection __ARGS((VimClipboard *cbd));
 void clip_mch_set_selection __ARGS((VimClipboard *cbd));
