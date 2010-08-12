@@ -2234,6 +2234,11 @@ void gui_mch_setmouse(int x, int y)
 {
 }
 
+void gui_mch_mousehide(int hide)
+{
+    [NSCursor setHiddenUntilMouseMoves: hide];
+}
+
 /* Mouse related }}} */
 
 /* Cursor blinking stuff {{{ */
