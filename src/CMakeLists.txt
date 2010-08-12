@@ -73,12 +73,12 @@ set(VIM_DIR_PATH                "/Resources/vim")
 set(PATHDEF_SOURCE              "${CMAKE_CURRENT_BINARY_DIR}/pathdef.c")
 set(CONFIG_H                    "${CMAKE_CURRENT_BINARY_DIR}/auto/config.h")
 
-set(VIM_SOURCES version.c buffer.c charset.c diff.c digraph.c edit.c eval.c
+set(VIM_SOURCES version.c blowfish.c buffer.c charset.c diff.c digraph.c edit.c eval.c
                 ex_cmds.c ex_cmds2.c ex_docmd.c ex_eval.c ex_getln.c fileio.c
                 fold.c getchar.c hardcopy.c hashtab.c if_cscope.c if_xcmdsrv.c
                 main.c mark.c memfile.c memline.c menu.c message.c misc1.c
-                misc2.c move.c mbyte.c normal.c ops.c option.c os_unix.c
-                popupmnu.c quickfix.c regexp.c screen.c search.c spell.c
+                misc2.c move.c mbyte.c netbeans.c normal.c ops.c option.c os_unix.c
+                popupmnu.c quickfix.c regexp.c screen.c search.c sha256.c spell.c
                 syntax.c tag.c term.c ui.c undo.c window.c
                 ${PATHDEF_SOURCE}
                 ${OS_EXTRA_SOURCES}
