@@ -277,7 +277,7 @@
 /* #undef FEAT_SMALL */
 
 /* Define if you want normal features. */
-#define FEAT_NORMAL 1
+/* #undef FEAT_NORMAL */
 
 /* Define if you want big features. */
 /* #undef FEAT_BIG */
