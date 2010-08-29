@@ -6,7 +6,7 @@ project(VIM)
 set(VIMMAJOR 7)
 set(VIMMINOR 2)
 set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}")
-set(VIM_COCOA_VERSION "0.4.2")
+set(VIM_COCOA_VERSION "0.5")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")

@@ -1302,12 +1302,12 @@ list_version()
 #ifdef MACOS
 # ifdef MACOS_X
 #  ifdef MACOS_X_UNIX
-    MSG_PUTS(_("\nMacOS X (unix) version"));
+    MSG_PUTS(_("\nMac OS X (unix) version"));
 #  else
-    MSG_PUTS(_("\nMacOS X version"));
+    MSG_PUTS(_("\nMac OS X version"));
 #  endif
 #else
-    MSG_PUTS(_("\nMacOS version"));
+    MSG_PUTS(_("\nMac OS version"));
 # endif
 #endif
 

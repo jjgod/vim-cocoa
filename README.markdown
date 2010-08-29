@@ -35,6 +35,12 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.5
+
+* Update to vim 7.3
+* Fix an issue caused by sudden termination support
+* Fix max window size calculation problem. (Reported by hupple)
+
 ### 0.4.2
 
 * Fix a drawing buffer overflow issue (reported by fishy)
