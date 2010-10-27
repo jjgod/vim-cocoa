@@ -1912,7 +1912,7 @@ void print_draw_flags(int flags)
         fprintf(stderr, "\n");
 }
 
-void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line,
+void gui_mac_draw_ct_line(CGContextRef context, char_u *s, CTLineRef line,
                           NSPoint origin, int row);
 
 void gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
@@ -2035,7 +2035,7 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
                                      FT_Y(row) - p_linespace);
     CGContextSetTextPosition(context, textOrigin.x, textOrigin.y);
 
-    gui_mac_draw_ct_line(context, line, textOrigin, row);
+    gui_mac_draw_ct_line(context, s, line, textOrigin, row);
 
     if (flags & DRAW_UNDERL)
     {
@@ -2069,15 +2069,12 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
     CFRelease(line);
 }
 
-void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line, NSPoint origin, int row)
+void gui_mac_draw_ct_line(CGContextRef context, char_u *s, CTLineRef line, NSPoint origin, int row)
 {
     CFArrayRef runArray = CTLineGetGlyphRuns(line);
     CFIndex runCount = CFArrayGetCount(runArray);
     CFIndex i, glyphOffset;
     CGFloat x;
-    const CGGlyph mglyphs[1] = { '_' };
-    CGSize advances[1];
-
     for (i = 0, x = origin.x, glyphOffset = 0; i < runCount; i++)
     {
         CTRunRef             run = (CTRunRef) CFArrayGetValueAtIndex(runArray, i);
@@ -2097,10 +2094,8 @@ void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line, NSPoint origin, 
             isDouble = NO;
         else
         {
-            // Otherwise we need to check the advances for its actual width
-            CTFontGetAdvancesForGlyphs(runFont, kCTFontDefaultOrientation,
-                                       mglyphs, advances, 1);
-            isDouble = (advances[0].width != gui.char_width) ? YES : NO;
+            CFRange range = CTRunGetStringRange(run);
+            isDouble = (*mb_ptr2cells)(s + range.location) > 1 ? YES : NO;
         }
 
         if (isDouble)
@@ -2108,8 +2103,6 @@ void gui_mac_draw_ct_line(CGContextRef context, CTLineRef line, NSPoint origin, 
 
         CGContextSetTextPosition(context, x, origin.y);
 
-        // NSLog(@"r%d, %d, %g, (%g, %g), run[%d] len = %d, font = %@",
-        //      row, isDouble, advance, x, origin.y, i, len, [runFont fontName]);
         x += advance;
         CGFontRef cgFont = CTFontCopyGraphicsFont(runFont, NULL);
         CGContextSetFont(context, cgFont);
