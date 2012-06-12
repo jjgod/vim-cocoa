@@ -1315,33 +1315,24 @@ char_u *gui_mch_browse(
         file = NSStringFromVim(dflt);
 
     gui_mac.selected_file = nil;
+    NSSavePanel *panel;
     if (saving)
+        panel = [NSSavePanel savePanel];
+    else
     {
-        NSSavePanel *panel = [NSSavePanel savePanel];
-
-        [panel setTitle: NSStringFromVim(title)];
-        [panel beginSheetForDirectory: dir
-                                 file: file
-                       modalForWindow: gui_mac.current_window
-                        modalDelegate: gui_mac.app_delegate
-                       didEndSelector: @selector(panelDidEnd:code:context:)
-                          contextInfo: NULL];
-    } else
-    {
-        NSOpenPanel *panel = [NSOpenPanel openPanel];
-
-        [panel setTitle: NSStringFromVim(title)];
-        [panel setAllowsMultipleSelection: NO];
-
-        [panel beginSheetForDirectory: dir
-                                 file: file
-                                types: nil
-                       modalForWindow: gui_mac.current_window
-                        modalDelegate: gui_mac.app_delegate
-                       didEndSelector: @selector(panelDidEnd:code:context:)
-                          contextInfo: NULL];
+        panel = [NSOpenPanel openPanel];
+        [(NSOpenPanel *) panel setAllowsMultipleSelection: NO];
     }
-
+    [panel setTitle: NSStringFromVim(title)];
+    if (dir)
+        [panel setDirectoryURL: [NSURL fileURLWithPath: dir isDirectory: YES]];
+    if (file)
+        [panel setNameFieldStringValue: file];
+    [panel beginSheetModalForWindow: gui_mac.current_window
+                  completionHandler: (^(NSInteger result){
+                        NSString *string = (result == NSOKButton) ? [[panel URL] path] : nil;
+                        gui_mac.selected_file = [string copy];
+                        [NSApp stop: gui_mac.app_delegate]; })];
     [NSApp run];
     [gui_mac.current_window makeKeyAndOrderFront: nil];
 
@@ -1361,7 +1352,8 @@ int gui_mch_dialog(
     char_u  *message,
     char_u  *buttons,
     int     dfltbutton,
-    char_u  *textfield)
+    char_u  *textfield,
+    int     ex_cmd)
 {
     gui_mac_redraw();
 
@@ -1555,6 +1547,9 @@ guicolor_T gui_mch_get_color(char_u *name)
                                        green: &green
                                         blue: &blue
                                        alpha: &alpha];
+            r = red * 256;
+            g = green * 256;
+            b = blue * 256;
             return (RGB(r, g, b));
         }
 
@@ -2616,7 +2611,7 @@ finish:
 
 - (void) panelDidEnd:(NSSavePanel *)panel code:(int)code context:(void *)context
 {
-    NSString *string = (code == NSOKButton) ? [panel filename] : nil;
+    NSString *string = (code == NSOKButton) ? [[panel URL] path] : nil;
     gui_mac.selected_file = [string copy];
 
     [NSApp stop: self];
