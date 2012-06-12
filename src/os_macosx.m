@@ -30,7 +30,7 @@
  * gui_mac.c are used then.  TODO: remove those instead?
  * But for MacVim we do need these ones.
  */
-#if defined(FEAT_CLIPBOARD) && (!defined(FEAT_GUI_ENABLED) || defined(FEAT_GUI_MACVIM))
+#if defined(FEAT_CLIPBOARD) && (!defined(FEAT_GUI_ENABLED) || defined(FEAT_GUI_MACVIM) || defined(FEAT_GUI_COCOA))
 
 /* Used to identify clipboard data copied from Vim. */
 

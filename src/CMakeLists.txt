@@ -4,14 +4,17 @@ cmake_minimum_required(VERSION 2.6)
 project(VIM)
 
 set(VIMMAJOR 7)
-set(VIMMINOR 2)
+set(VIMMINOR 3)
 set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}")
-set(VIM_COCOA_VERSION "0.5")
+set(VIM_COCOA_VERSION "0.6")
 
 if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Debug")
+    set(CMAKE_BUILD_TYPE "Release")
     set(CMAKE_C_COMPILER "clang")
 endif (NOT CMAKE_BUILD_TYPE)
+
+set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror")
+set(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
 
 if (NOT GUI)
     if (APPLE)
@@ -22,26 +25,12 @@ endif(NOT GUI)
 if (APPLE)
   set(PROGNAME      Vim)
   set(VIM_PREFIX    "/Applications")
-
-  # Only build Universal Binary when it's release build
-  if (CMAKE_BUILD_TYPE STREQUAL "Release")
-      set(CMAKE_OSX_ARCHITECTURES x86_64;i386;ppc)
-  endif (CMAKE_BUILD_TYPE STREQUAL "Release")
-
   set(OS_EXTRA_SOURCES os_macosx.m os_mac_conv.c)
   set(PYTHON_INTERP 1)
   set(RUBY_INTERP 1)
 else (NOT APPLE)
   set(PROGNAME vim)
 endif (APPLE)
-
-if (CMAKE_COMPILER_IS_GNUCC)
-  set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror -mmacosx-version-min=10.5")
-  set(CMAKE_C_FLAGS_RELEASE "-O2 -pipe -fomit-frame-pointer -Wall -mmacosx-version-min=10.5")
-  set(CMAKE_OSX_SYSROOT "/Developer/SDKs/MacOSX10.5.sdk")
-  # cmake will pass CFLAGS to linker, so we need clang to omit warnings for -Wall, -Werror, etc.
-  set(CMAKE_EXE_LINKER_FLAGS "-Qunused-arguments")
-endif (CMAKE_COMPILER_IS_GNUCC)
 
 find_path(PYTHON_INCLUDE_DIR Python.h)
 find_path(RUBY_INCLUDE_DIR   ruby.h HINTS "/System/Library/Frameworks")
