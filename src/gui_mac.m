@@ -2511,7 +2511,20 @@ unsigned int has_fname(char_u *fname)
         goto finish;
     }
 
-    handle_drop(count, fnames, FALSE);
+    // Open all the dropped files with tabs
+    for (i = 0; i < count; i++)
+    {
+        exarg_T ea;
+
+        if (has_fname(fnames[i]))
+            continue;
+
+        vim_memset(&ea, 0, sizeof(ea));
+        ea.cmdidx = CMD_tabedit;
+        ea.cmd = (char_u *)"tabe";
+        ea.arg = fnames[i];
+        ex_splitview(&ea);
+    }
 
     /* Update the screen display */
     update_screen(NOT_VALID);
