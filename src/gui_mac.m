@@ -2514,19 +2514,6 @@ unsigned int has_fname(char_u *fname)
     char_u *p = vim_strsave(fnames[0]);
     handle_drop(count, fnames, FALSE);
 
-    if (p != NULL)
-    {
-        if (mch_isdir(p))
-        {
-            if (mch_chdir((char *)p) == 0)
-                shorten_fnames(TRUE);
-        }
-        else if (vim_chdirfile(p) == OK)
-            shorten_fnames(TRUE);
-
-        vim_free(p);
-    }
-
     /* Update the screen display */
     update_screen(NOT_VALID);
 #ifdef FEAT_MENU
