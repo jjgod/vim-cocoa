@@ -104,6 +104,10 @@ static struct
                  NSUnifiedTitleAndToolbarWindowMask | \
                      NSTexturedBackgroundWindowMask)
 
+/* Was using kATSItalicSkew before Fix2X() deprecated, so we define
+ * the same value but in floating number instead of fixed */
+const CGFloat kItalicSkew = 0.25;
+
 /* A simple view to make setting text area, scrollbar position inside
  * vim window easier */
 @interface VIMContentView: NSView {
@@ -2009,7 +2013,7 @@ void gui_mac_draw_string(int row, int col, char_u *s, int len, int flags,
      * draw on the same line, following the slanted texts, the new part
      * will overwrite some part of the slanted characters we've drawn
      * before, it's ugly, but I haven't found a better solution. */
-    transform.c = (flags & DRAW_ITALIC) ? Fix2X(kATSItalicQDSkew) : 0.0;
+    transform.c = (flags & DRAW_ITALIC) ? kItalicSkew : 0.0;
 
     CGContextSetTextMatrix(context, transform);
     CGContextSetAllowsAntialiasing(context, p_antialias);
