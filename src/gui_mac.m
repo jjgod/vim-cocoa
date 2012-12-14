@@ -2317,7 +2317,7 @@ void gui_mch_update_tabline()
     int             currentTabIndex = tabpage_index(curtab) - 1;
 
     gui_mac_debug(@"gui_mch_update_tabline: cti = %d, otc = %d",
-                currentTabIndex, originalTabCount);
+                  currentTabIndex, originalTabCount);
 
     for (tp = first_tabpage, i = 0;
          tp != NULL;
@@ -2511,7 +2511,6 @@ unsigned int has_fname(char_u *fname)
         goto finish;
     }
 
-    char_u *p = vim_strsave(fnames[0]);
     handle_drop(count, fnames, FALSE);
 
     /* Update the screen display */
