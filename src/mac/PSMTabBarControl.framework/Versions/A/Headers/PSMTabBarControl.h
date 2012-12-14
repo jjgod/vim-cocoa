@@ -12,6 +12,18 @@
 
 #import <Cocoa/Cocoa.h>
 
+#ifndef NSINTEGER_DEFINED
+// NSInteger was introduced in 10.5
+# if __LP64__ || NS_BUILD_32_LIKE_64
+typedef long NSInteger;
+typedef unsigned long NSUInteger;
+# else
+typedef int NSInteger;
+typedef unsigned int NSUInteger;
+# endif
+# define NSINTEGER_DEFINED 1
+#endif
+
 #define kPSMTabBarControlHeight 22
 // internal cell border
 #define MARGIN_X        6
@@ -39,7 +51,12 @@ enum {
     PSMTab_PositionSingleMask		= 1 << 7
 };
 
-@interface PSMTabBarControl : NSControl <NSTabViewDelegate> {
+@interface PSMTabBarControl : NSControl
+#if (MAC_OS_X_VERSION_MAX_ALLOWED >= 1060)
+    // 10.6 has turned delegate messages into formal protocols
+    <NSTabViewDelegate>
+#endif
+{
 
     // control basics
     NSMutableArray              *_cells;                    // the cells that draw the tabs
@@ -69,6 +86,8 @@ enum {
     // drag and drop
     NSEvent                     *_lastMouseDownEvent;      // keep this for dragging reference
     BOOL			_allowsDragBetweenWindows;
+    BOOL                        _delegateHandlingDrag;
+    NSDragOperation             _delegateInitialDragOperation;
 
     // MVC help
     IBOutlet id                 delegate;
@@ -97,6 +116,9 @@ enum {
 - (BOOL)allowsDragBetweenWindows;
 - (void)setAllowsDragBetweenWindows:(BOOL)flag;
 
+// tool tips
+- (void)setToolTip:(NSString *)value forTabViewItem:(NSTabViewItem *)tvi;
+
 // accessors
 - (NSTabView *)tabView;
 - (void)setTabView:(NSTabView *)view;
@@ -121,4 +143,11 @@ enum {
 - (void)tabView:(NSTabView *)aTabView willCloseTabViewItem:(NSTabViewItem *)tabViewItem;
 - (void)tabView:(NSTabView *)aTabView didCloseTabViewItem:(NSTabViewItem *)tabViewItem;
 - (void)tabView:(NSTabView *)aTabView didDragTabViewItem:(NSTabViewItem *)tabViewItem toIndex:(int)idx;
+
+- (NSDragOperation)tabBarControl:(PSMTabBarControl *)theTabBarControl draggingEntered:(id <NSDraggingInfo>)sender forTabAtIndex:(NSUInteger)tabIndex;
+- (NSDragOperation)tabBarControl:(PSMTabBarControl *)theTabBarControl draggingUpdated:(id <NSDraggingInfo>)sender forTabAtIndex:(NSUInteger)tabIndex;
+- (void)tabBarControl:(PSMTabBarControl *)theTabBarControl draggingExited:(id <NSDraggingInfo>)sender forTabAtIndex:(NSUInteger)tabIndex;
+- (BOOL)tabBarControl:(PSMTabBarControl *)theTabBarControl prepareForDragOperation:(id <NSDraggingInfo>)sender forTabAtIndex:(NSUInteger)tabIndex;
+- (BOOL)tabBarControl:(PSMTabBarControl *)theTabBarControl performDragOperation:(id <NSDraggingInfo>)sender forTabAtIndex:(NSUInteger)tabIndex;
+- (void)tabBarControl:(PSMTabBarControl *)theTabBarControl concludeDragOperation:(id <NSDraggingInfo>)sender forTabAtIndex:(NSUInteger)tabIndex;
 @end
