@@ -270,8 +270,13 @@ struct gui_mac_data {
     struct gui_mac_drawing_op *ops;
     uint32_t    max_ops, queued_ops;
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 1090
     CGSize      single_advances[VIM_MAX_COL_LEN];
     CGSize      double_advances[VIM_MAX_COL_LEN];
+#else
+    CGPoint     single_positions[VIM_MAX_COL_LEN];
+    CGPoint     double_positions[VIM_MAX_COL_LEN];
+#endif
 
     VimAppController  *app_delegate;
     NSAutoreleasePool *app_pool;
@@ -342,10 +347,6 @@ struct gui_mac_data {
 
 @interface NSApplication (VimAdditions)
 - (void) setAppleMenu:(NSMenu *)aMenu;
-@end
-
-@interface NSFont (AppKitPrivate)
-- (ATSUFontID) _atsFontID;
 @end
 
 NSColor     *NSColorFromGuiColor(guicolor_T color, float alpha);
@@ -893,8 +894,13 @@ int gui_mch_init_font(char_u *font_name, int fontset)
     // Initialize advances array, it's a pre-mature optimization, evil
     for (i = 0; i < VIM_MAX_COL_LEN; i++)
     {
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 1090
         gui_mac.single_advances[i] = CGSizeMake(gui.char_width, 0);
         gui_mac.double_advances[i] = CGSizeMake(gui.char_width * 2, 0);
+#else
+        gui_mac.single_positions[i] = CGPointMake(gui.char_width * i, 0);
+        gui_mac.double_positions[i] = CGPointMake(gui.char_width * i * 2, 0);
+#endif
     }
 
     /* Character placement in a line:
@@ -2103,6 +2109,7 @@ void gui_mac_draw_ct_line(CGContextRef context, char_u *s, CTLineRef line, NSPoi
         CGContextSetTextPosition(context, x, origin.y);
 
         x += advance;
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 1090
         CGFontRef cgFont = CTFontCopyGraphicsFont(runFont, NULL);
         CGContextSetFont(context, cgFont);
         CGContextSetFontSize(context, CTFontGetSize(runFont));
@@ -2114,6 +2121,12 @@ void gui_mac_draw_ct_line(CGContextRef context, char_u *s, CTLineRef line, NSPoi
                                                  : gui_mac.single_advances,
                                         len);
         CFRelease(cgFont);
+#else
+        const CGGlyph *glyphs = CTRunGetGlyphsPtr(run);
+        CTFontDrawGlyphs(runFont, glyphs, isDouble ? gui_mac.double_positions
+                                                   : gui_mac.single_positions,
+                         len, context);
+#endif
     }
 }
 
