@@ -35,7 +35,19 @@
 #cmakedefine UNIX
 
 /* Defined to the size of an int */
-#define SIZEOF_INT 4
+#define VIM_SIZEOF_INT 4
+
+/* Defined to the size of a long */
+#define VIM_SIZEOF_LONG 8
+
+/* Defined to the size of off_t */
+#define SIZEOF_OFF_T 8
+
+/* Defined to the size of time_t */
+#define SIZEOF_TIME_T 8
+
+/* Define when wchar_t is only 2 bytes. */
+/* #undef SMALL_WCHAR_T */
 
 /*
  * If we cannot trust one of the following from the libraries, we use our
@@ -379,3 +391,12 @@
 
 /* Define if you want XSMP interaction as well as vanilla swapfile safety */
 #define USE_XSMP_INTERACT 1
+
+/* Define if fcntl()'s F_SETFD command knows about FD_CLOEXEC */
+#define HAVE_FD_CLOEXEC 1
+
+/* Define if you want Cygwin to use the WIN32 clipboard, not compatible with X11*/
+/* #undef FEAT_CYGWIN_WIN32_CLIPBOARD */
+
+/* Define if we have AvailabilityMacros.h on Mac OS X */
+#define HAVE_AVAILABILITYMACROS_H 1

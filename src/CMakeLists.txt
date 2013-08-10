@@ -4,8 +4,8 @@ cmake_minimum_required(VERSION 2.6)
 project(VIM)
 
 set(VIMMAJOR 7)
-set(VIMMINOR 3)
-set(VIMPATCH 760)
+set(VIMMINOR 4)
+set(VIMPATCH 192)
 set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}.${VIMPATCH}")
 set(VIM_COCOA_VERSION "0.7")
 
@@ -33,16 +33,20 @@ else (NOT APPLE)
   set(PROGNAME vim)
 endif (APPLE)
 
-find_path(PYTHON_INCLUDE_DIR Python.h)
+include(FindPythonLibs)
+
 find_path(RUBY_INCLUDE_DIR   ruby.h HINTS "/System/Library/Frameworks")
+
+set(PSMTBC_PATH ${VIM_SOURCE_DIR}/mac)
+find_library(PSMTBC_FRAMEWORK PSMTabBarControl ${PSMTBC_PATH})
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR}
                     ${VIM_SOURCE_DIR} ${VIM_SOURCE_DIR}/proto
-                    ${PYTHON_INCLUDE_DIR} ${RUBY_INCLUDE_DIR})
+                    ${PYTHON_INCLUDE_DIRS} ${RUBY_INCLUDE_DIR})
 
 # -DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA
 add_definitions(-DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -DMACOS_X_UNIX
-                -D_FORTIFY_SOURCE=1)
+                -D_FORTIFY_SOURCE=1 -DRUBY_VERSION=20 -F ${PSMTBC_PATH})
 
 set(PYTHON_INTERP_SOURCES   if_python.c)
 set(RUBY_INTERP_SOURCES     if_ruby.c)
@@ -87,9 +91,6 @@ find_library(COCOA_FRAMEWORK  Cocoa)
 find_library(CARBON_FRAMEWORK Carbon)
 find_library(PYTHON_FRAMEWORK Python)
 find_library(RUBY_FRAMEWORK   Ruby)
-
-set(PSMTBC_PATH ${VIM_SOURCE_DIR}/mac)
-find_library(PSMTBC_FRAMEWORK PSMTabBarControl ${PSMTBC_PATH})
 
 set(VIM_LIBRARIES ${m} ${ncurses} ${iconv}
     ${COCOA_FRAMEWORK} ${PSMTBC_FRAMEWORK} ${CARBON_FRAMEWORK} ${PYTHON_FRAMEWORK} ${RUBY_FRAMEWORK})
