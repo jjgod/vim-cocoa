@@ -85,6 +85,33 @@ static char *(main_errors[]) =
 #define ME_INVALID_ARG		5
 };
 
+#if defined(FEAT_GUI_COCOA)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+
+int get_process_name(pid_t inPID, char *outName, size_t inMaxLen)
+{
+    struct kinfo_proc info;
+    size_t length = sizeof(struct kinfo_proc);
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, inPID };
+
+    if (sysctl(mib, 4, &info, &length, NULL, 0) < 0)
+        return -1 ;
+    else
+        strncpy(outName, info.kp_proc.p_comm, inMaxLen);
+    return 0;
+}
+
+int should_start_as_gui() {
+    char parent_process_name[1024];
+    if (!get_process_name(getppid(), parent_process_name, 1024) &&
+        !strcmp(parent_process_name, "launchd"))
+       return TRUE;
+
+    return FALSE;
+}
+#endif
+
 #ifndef PROTO		/* don't want a prototype for main() */
 #ifndef NO_VIM_MAIN	/* skip this for unittests */
 
@@ -217,6 +244,9 @@ main
 		mch_exit(1);
 	}
     }
+# endif
+# if defined(FEAT_GUI_COCOA)
+    gui.starting = should_start_as_gui();
 # endif
 #endif
 
