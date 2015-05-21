@@ -247,7 +247,8 @@ main
     }
 # endif
 # if defined(FEAT_GUI_COCOA)
-    gui.starting = should_start_as_gui();
+    if (gui.starting != TRUE)
+        gui.starting = should_start_as_gui();
 # endif
 #endif
 

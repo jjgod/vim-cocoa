@@ -5,9 +5,9 @@ project(VIM)
 
 set(VIMMAJOR 7)
 set(VIMMINOR 4)
-set(VIMPATCH 192)
+set(VIMPATCH 658)
 set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}.${VIMPATCH}")
-set(VIM_COCOA_VERSION "0.8")
+set(VIM_COCOA_VERSION "0.9")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
@@ -67,13 +67,14 @@ set(VIM_DIR_PATH                "/Resources/vim")
 set(PATHDEF_SOURCE              "${CMAKE_CURRENT_BINARY_DIR}/pathdef.c")
 set(CONFIG_H                    "${CMAKE_CURRENT_BINARY_DIR}/auto/config.h")
 
-set(VIM_SOURCES version.c blowfish.c buffer.c charset.c diff.c digraph.c edit.c eval.c
-                ex_cmds.c ex_cmds2.c ex_docmd.c ex_eval.c ex_getln.c fileio.c
-                fold.c getchar.c hardcopy.c hashtab.c if_cscope.c if_xcmdsrv.c
-                main.c mark.c memfile.c memline.c menu.c message.c misc1.c
-                misc2.c move.c mbyte.c netbeans.c normal.c ops.c option.c os_unix.c
-                popupmnu.c quickfix.c regexp.c screen.c search.c sha256.c spell.c
-                syntax.c tag.c term.c ui.c undo.c window.c
+set(VIM_SOURCES version.c blowfish.c buffer.c charset.c crypt.c crypt_zip.c
+                diff.c digraph.c edit.c eval.c ex_cmds.c ex_cmds2.c ex_docmd.c
+                ex_eval.c ex_getln.c fileio.c fold.c getchar.c hardcopy.c
+                hashtab.c if_cscope.c if_xcmdsrv.c main.c mark.c memfile.c
+                memline.c menu.c message.c misc1.c misc2.c move.c mbyte.c
+                netbeans.c normal.c ops.c option.c os_unix.c popupmnu.c
+                quickfix.c regexp.c screen.c search.c sha256.c spell.c syntax.c
+                tag.c term.c ui.c undo.c window.c
                 ${PATHDEF_SOURCE}
                 ${OS_EXTRA_SOURCES}
                 ${INTERP_SOURCES}
