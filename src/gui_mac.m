@@ -121,7 +121,7 @@ const CGFloat kItalicSkew = 0.25;
 
 @end
 
-@interface VIMTextView: NSView <NSTextInput>
+@interface VIMTextView: NSView <NSTextInputClient>
 {
     NSRange              markedRange;
     NSRange              selectedRange;
@@ -456,7 +456,9 @@ int gui_mch_init()
 #ifdef FEAT_MENU
     gui.menu_height = 0;
 #endif
-    gui.scrollbar_height = gui.scrollbar_width = [VIMScroller scrollerWidth];
+    gui.scrollbar_height = gui.scrollbar_width =
+        [VIMScroller scrollerWidthForControlSize:NSRegularControlSize
+                                   scrollerStyle:NSScrollerStyleLegacy];
     gui.border_offset = gui.border_width = 2;
 
     gui_mac.current_window = nil;
@@ -1269,7 +1271,7 @@ void gui_make_popup(char_u *path_name, int mouse_pos)
     NSPoint point;
 
     if (mouse_pos)
-        point = [gui_mac.current_window convertScreenToBase: [NSEvent mouseLocation]];
+        point = [gui_mac.current_window mouseLocationOutsideOfEventStream];
     else
     {
         int row = curwin->w_wrow;
@@ -1340,7 +1342,7 @@ char_u *gui_mch_browse(
         [panel setNameFieldStringValue: file];
     [panel beginSheetModalForWindow: gui_mac.current_window
                   completionHandler: (^(NSInteger result){
-                        NSString *string = (result == NSOKButton) ? [[panel URL] path] : nil;
+                        NSString *string = (result == NSModalResponseOK) ? [[panel URL] path] : nil;
                         gui_mac.selected_file = [string copy];
                         [NSApp stop: gui_mac.app_delegate]; })];
     [NSApp run];
@@ -2627,7 +2629,7 @@ finish:
 
 - (void) panelDidEnd:(NSSavePanel *)panel code:(int)code context:(void *)context
 {
-    NSString *string = (code == NSOKButton) ? [[panel URL] path] : nil;
+    NSString *string = (code == NSModalResponseOK) ? [[panel URL] path] : nil;
     gui_mac.selected_file = [string copy];
 
     [NSApp stop: self];
@@ -3029,7 +3031,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     return NSMakeRange(NSNotFound, 0);
 }
 
-- (void) setMarkedText:(id)aString selectedRange:(NSRange)selRange
+- (void) setMarkedText:(id)aString
+         selectedRange:(NSRange)selRange
+      replacementRange:(NSRange)replacementRange
 {
     NSString *markedText;
 
@@ -3079,7 +3083,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     return nil;
 }
 
-- (NSAttributedString *) attributedSubstringFromRange:(NSRange)theRange
+- (NSAttributedString *) attributedSubstringForProposedRange:(NSRange)theRange
+                                                 actualRange:(NSRangePointer)actualRange
 {
     return nil;
 }
@@ -3091,6 +3096,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 }
 
 - (NSRect) firstRectForCharacterRange:(NSRange)theRange
+                          actualRange:(NSRangePointer)actualRange
 {
     NSRect rect = NSMakeRect(FILL_X(gui_mac.im_col),
                              FILL_Y(gui_mac.im_row + 1),
@@ -3098,8 +3104,9 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
                              gui.char_height);
 
     rect.origin = FLIPPED_POINT(self, rect.origin);
-    rect.origin = [[self window] convertBaseToScreen:
-                    [self convertPoint: rect.origin toView: nil]];
+    rect.origin = [self convertPoint: rect.origin toView: nil];
+
+    rect = [[self window] convertRectToScreen:rect];
 
     return rect;
 }
@@ -3116,6 +3123,10 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 
 #define INLINE_KEY_BUFFER_SIZE                      256
 #define add_to_key_buffer(buf, len, k1, k2, k3)     { buf[len++] = k1; buf[len++] = k2; buf[len++] = k3; }
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
+    [self insertText:string];
+}
 
 - (void) insertText:(id)aString
 {
