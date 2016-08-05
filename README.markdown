@@ -35,6 +35,11 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.10
+
+* Update to vim 7.4.2156.
+* Support macOS 10.12.
+
 ### 0.5
 
 * Update to vim 7.3
