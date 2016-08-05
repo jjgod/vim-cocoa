@@ -5,9 +5,9 @@ project(VIM)
 
 set(VIMMAJOR 7)
 set(VIMMINOR 4)
-set(VIMPATCH 658)
+set(VIMPATCH 2156)
 set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}.${VIMPATCH}")
-set(VIM_COCOA_VERSION "0.9")
+set(VIM_COCOA_VERSION "0.10")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
@@ -16,6 +16,7 @@ endif (NOT CMAKE_BUILD_TYPE)
 
 set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror")
 set(CMAKE_C_FLAGS_RELEASE "-O2 -Wall")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "10.9")
 
 if (NOT GUI)
     if (APPLE)
@@ -45,7 +46,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}
                     ${PYTHON_INCLUDE_DIRS} ${RUBY_INCLUDE_DIR})
 
 # -DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA
-add_definitions(-DHAVE_CONFIG_H -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -DMACOS_X_UNIX
+add_definitions(-DHAVE_CONFIG_H -DHAVE_MATH_H -DHAVE_ISNAN -DHAVE_ISINF -DFEAT_GUI_MAC -DFEAT_GUI_COCOA -DMACOS_X_UNIX
                 -D_FORTIFY_SOURCE=1 -DRUBY_VERSION=20 -F ${PSMTBC_PATH})
 
 set(PYTHON_INTERP_SOURCES   if_python.c)
@@ -67,14 +68,17 @@ set(VIM_DIR_PATH                "/Resources/vim")
 set(PATHDEF_SOURCE              "${CMAKE_CURRENT_BINARY_DIR}/pathdef.c")
 set(CONFIG_H                    "${CMAKE_CURRENT_BINARY_DIR}/auto/config.h")
 
-set(VIM_SOURCES version.c blowfish.c buffer.c charset.c crypt.c crypt_zip.c
-                diff.c digraph.c edit.c eval.c ex_cmds.c ex_cmds2.c ex_docmd.c
-                ex_eval.c ex_getln.c fileio.c fold.c getchar.c hardcopy.c
-                hashtab.c if_cscope.c if_xcmdsrv.c main.c mark.c memfile.c
+set(VIM_SOURCES version.c arabic.c blowfish.c buffer.c channel.c
+                charset.c crypt.c crypt_zip.c dict.c diff.c digraph.c
+                edit.c eval.c evalfunc.c ex_cmds.c ex_cmds2.c ex_docmd.c
+                ex_eval.c ex_getln.c farsi.c fileio.c fold.c getchar.c
+                hardcopy.c hashtab.c json.c if_cscope.c if_xcmdsrv.c
+                list.c main.c mark.c memfile.c
                 memline.c menu.c message.c misc1.c misc2.c move.c mbyte.c
                 netbeans.c normal.c ops.c option.c os_unix.c popupmnu.c
-                quickfix.c regexp.c screen.c search.c sha256.c spell.c syntax.c
-                tag.c term.c ui.c undo.c window.c
+                quickfix.c regexp.c screen.c search.c sha256.c spell.c
+                spellfile.c syntax.c tag.c term.c ui.c undo.c userfunc.c
+                window.c
                 ${PATHDEF_SOURCE}
                 ${OS_EXTRA_SOURCES}
                 ${INTERP_SOURCES}
@@ -140,9 +144,7 @@ set_target_properties(${PROGNAME} PROPERTIES
 # instead we just make a symlink from the source code position to here for
 # testing purpose. When we need to 'make install', another procedure will
 # be used to ensure these resource files and frameworks are correctly copied.
-get_target_property(VIMEXE_LOCATION ${PROGNAME} LOCATION)
-
-string(REPLACE "/MacOS/Vim" "" VIMAPP_LOCATION "${VIMEXE_LOCATION}")
+set(VIMAPP_LOCATION "$<TARGET_FILE_DIR:${PROGNAME}>/..")
 
 set(VIM_BUNDLE_FRAMEWORK_PATH       "${VIMAPP_LOCATION}/Frameworks")
 set(PSMTBC_FRAMEWORK_PATH_IN_BUNDLE "${VIM_BUNDLE_FRAMEWORK_PATH}/PSMTabBarControl.framework")
@@ -157,7 +159,7 @@ add_custom_command(TARGET ${PROGNAME}
                    COMMAND mkdir -p ${VIM_BUNDLE_VIM_PATH}
                    COMMAND cmake -E remove -f ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
                    COMMAND cmake -E remove -f ${VIM_RUNTIME_PATH_IN_BUNDLE}
-                   COMMAND cmake -E copy_directory ${PSMTBC_FRAMEWORK} ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
+                   COMMAND cp -R ${PSMTBC_FRAMEWORK} ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
                    COMMAND cmake -E copy_directory ${VIM_RUNTIME_PATH} ${VIM_RUNTIME_PATH_IN_BUNDLE}
                    COMMAND sh -c "cd ${VIM_RUNTIME_PATH_IN_BUNDLE}/doc && vim -u NONE -esX -c 'helptags ++t .' -c quit"
                    COMMENT "Adding ${PSMTBC_FRAMEWORK} to ${VIM_BUNDLE_FRAMEWORK_PATH}" VERBATIM)
