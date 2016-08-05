@@ -97,12 +97,10 @@ static struct
 #define FT_Y(row)               (gui_mac.main_height - TEXT_Y(row))
 #define VIM_BG_ALPHA            ((100 - p_transp) / 100.0)
 
-#define kVIMWindowStyle         (NSTitledWindowMask | \
-                         NSMiniaturizableWindowMask | \
-                               NSClosableWindowMask | \
-                              NSResizableWindowMask | \
-                 NSUnifiedTitleAndToolbarWindowMask | \
-                     NSTexturedBackgroundWindowMask)
+#define kVIMWindowStyle         (NSWindowStyleMaskTitled | \
+                         NSWindowStyleMaskMiniaturizable | \
+                               NSWindowStyleMaskClosable | \
+                              NSWindowStyleMaskResizable)
 
 /* Was using kATSItalicSkew before Fix2X() deprecated, so we define
  * the same value but in floating number instead of fixed */
@@ -169,10 +167,7 @@ static int VIMAlertTextFieldHeight = 22;
 
 @end
 
-@interface VimAppController: NSObject
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
-<NSWindowDelegate>
-#endif
+@interface VimAppController: NSObject <NSWindowDelegate, NSApplicationDelegate>
 - (void) alertDidEnd:(VIMAlert *)alert returnCode:(int)returnCode contextInfo:(void *)contextInfo;
 - (void) panelDidEnd:(NSSavePanel *)panel code:(int)code context:(void *)context;
 - (void) initializeApplicationTimer:(NSTimer *)timer;
@@ -457,7 +452,7 @@ int gui_mch_init()
     gui.menu_height = 0;
 #endif
     gui.scrollbar_height = gui.scrollbar_width =
-        [VIMScroller scrollerWidthForControlSize:NSRegularControlSize
+        [VIMScroller scrollerWidthForControlSize:NSControlSizeRegular
                                    scrollerStyle:NSScrollerStyleLegacy];
     gui.border_offset = gui.border_width = 2;
 
@@ -705,7 +700,7 @@ int gui_mch_wait_for_chars(int wtime)
 
     gui_mac_run_app();
     while (gui_mac_app_is_running() &&
-           (event = [NSApp nextEventMatchingMask: NSAnyEventMask
+           (event = [NSApp nextEventMatchingMask: NSEventMaskAny
                                        untilDate: date
                                           inMode: NSDefaultRunLoopMode
                                          dequeue: YES]) != nil)
@@ -1281,7 +1276,7 @@ void gui_make_popup(char_u *path_name, int mouse_pos)
         point = [currentView convertPoint: point toView: nil];
     }
 
-    event = [NSEvent mouseEventWithType: NSRightMouseDown
+    event = [NSEvent mouseEventWithType: NSEventTypeRightMouseDown
                                location: point
                           modifierFlags: 0
                               timestamp: 0
@@ -2230,6 +2225,20 @@ void gui_mch_set_scrollbar_thumb(
 
 /* Scrollbar related }}} */
 
+/* Blinking related {{{ */
+
+int gui_mch_is_blinking(void)
+{
+    return FALSE;
+}
+
+int gui_mch_is_blink_off(void)
+{
+    return FALSE;
+}
+
+/* Blinking related {{{ */
+
 /* Mouse related {{{ */
 
 void gui_mch_getmouse(int *x, int *y)
@@ -2411,16 +2420,16 @@ NSAlertStyle NSAlertStyleFromVim(int type)
     case VIM_GENERIC:
     case VIM_INFO:
     case VIM_QUESTION:
-        return NSInformationalAlertStyle;
+        return NSAlertStyleInformational;
 
     case VIM_WARNING:
-        return NSWarningAlertStyle;
+        return NSAlertStyleWarning;
 
     case VIM_ERROR:
-        return NSCriticalAlertStyle;
+        return NSAlertStyleCritical;
 
     default:
-        return NSInformationalAlertStyle;
+        return NSAlertStyleInformational;
     }
 }
 
@@ -2457,7 +2466,7 @@ void gui_mac_update()
 void gui_mac_send_dummy_event()
 {
     NSEvent *event;
-    event = [NSEvent otherEventWithType: NSApplicationDefined
+    event = [NSEvent otherEventWithType: NSEventTypeApplicationDefined
                                location: NSZeroPoint
                           modifierFlags: 0
                               timestamp: 0
@@ -2582,7 +2591,7 @@ finish:
         [alert setMessageText: @"Quit without saving?"];
         [alert setInformativeText: @"There are modified buffers, "
            " if you quit now all changes will be lost.  Quit anyway?"];
-        [alert setAlertStyle: NSWarningAlertStyle];
+        [alert setAlertStyle: NSAlertStyleWarning];
 
         [alert beginSheetModalForWindow: gui_mac.current_window
                           modalDelegate: gui_mac.app_delegate
@@ -2782,7 +2791,7 @@ void gui_mac_set_application_menu()
     menuItem = (NSMenuItem *)[appleMenu addItemWithTitle: @"Hide Others"
                                                   action: @selector(hideOtherApplications:)
                                            keyEquivalent: @"h"];
-    [menuItem setKeyEquivalentModifierMask: (NSAlternateKeyMask | NSCommandKeyMask)];
+    [menuItem setKeyEquivalentModifierMask: (NSEventModifierFlagOption | NSEventModifierFlagCommand)];
 
     // Show All
     [appleMenu addItemWithTitle: @"Show All"
@@ -3361,7 +3370,7 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
 {
     // Called for Cmd+key keystrokes, function keys, arrow keys, page
     // up/down, home, end.
-    if ([event type] != NSKeyDown)
+    if ([event type] != NSEventTypeKeyDown)
         return NO;
 
     // HACK!  Let the main menu try to handle any key down event, before
@@ -3378,8 +3387,8 @@ didDragTabViewItem: (NSTabViewItem *) tabViewItem
     if ([event keyCode] == 50)
         return NO;
 
-    if ([event modifierFlags] & NSCommandKeyMask ||
-        [event modifierFlags] & NSControlKeyMask)
+    if ([event modifierFlags] & NSEventModifierFlagCommand ||
+        [event modifierFlags] & NSEventModifierFlagControl)
     {
         [self keyDown: event];
         return YES;
@@ -3542,13 +3551,13 @@ unsigned int gui_mac_key_modifiers_to_vim(unsigned int mac_modifiers)
 {
     unsigned int vim_modifiers = 0;
 
-    if (mac_modifiers & NSShiftKeyMask)
+    if (mac_modifiers & NSEventModifierFlagShift)
         vim_modifiers |= MOD_MASK_SHIFT;
-    if (mac_modifiers & NSControlKeyMask)
+    if (mac_modifiers & NSEventModifierFlagControl)
         vim_modifiers |= MOD_MASK_CTRL;
-    if (mac_modifiers & NSAlternateKeyMask)
+    if (mac_modifiers & NSEventModifierFlagOption)
         vim_modifiers |= MOD_MASK_ALT;
-    if (mac_modifiers & NSCommandKeyMask)
+    if (mac_modifiers & NSEventModifierFlagCommand)
         vim_modifiers |= MOD_MASK_CMD;
 
     return vim_modifiers;
@@ -3573,11 +3582,11 @@ unsigned int gui_mac_mouse_modifiers_to_vim(unsigned int mac_modifiers)
 {
     unsigned int vim_modifiers = 0;
 
-    if (mac_modifiers & NSShiftKeyMask)
+    if (mac_modifiers & NSEventModifierFlagShift)
         vim_modifiers |= MOUSE_SHIFT;
-    if (mac_modifiers & NSControlKeyMask)
+    if (mac_modifiers & NSEventModifierFlagControl)
         vim_modifiers |= MOUSE_CTRL;
-    if (mac_modifiers & NSAlternateKeyMask)
+    if (mac_modifiers & NSEventModifierFlagOption)
         vim_modifiers |= MOUSE_ALT;
 
     return vim_modifiers;
