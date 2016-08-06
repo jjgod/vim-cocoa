@@ -104,9 +104,10 @@ int get_process_name(pid_t inPID, char *outName, size_t inMaxLen)
 
 int should_start_as_gui() {
     char parent_process_name[1024];
+    const char *launchd = "launchd";
     if (!get_process_name(getppid(), parent_process_name, 1024) &&
-        !strcmp(parent_process_name, "launchd"))
-       return TRUE;
+        !strncmp(parent_process_name, launchd, strlen(launchd)))
+        return TRUE;
 
     return FALSE;
 }
