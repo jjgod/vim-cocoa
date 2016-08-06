@@ -147,7 +147,6 @@ set_target_properties(${PROGNAME} PROPERTIES
 set(VIMAPP_LOCATION "$<TARGET_FILE_DIR:${PROGNAME}>/..")
 
 set(VIM_BUNDLE_FRAMEWORK_PATH       "${VIMAPP_LOCATION}/Frameworks")
-set(PSMTBC_FRAMEWORK_PATH_IN_BUNDLE "${VIM_BUNDLE_FRAMEWORK_PATH}/PSMTabBarControl.framework")
 
 set(VIM_RUNTIME_PATH                "${VIM_SOURCE_DIR}/../runtime")
 set(VIM_BUNDLE_VIM_PATH             "${VIMAPP_LOCATION}${VIM_DIR_PATH}")
@@ -157,12 +156,10 @@ add_custom_command(TARGET ${PROGNAME}
                    POST_BUILD
                    COMMAND mkdir -p ${VIM_BUNDLE_FRAMEWORK_PATH}
                    COMMAND mkdir -p ${VIM_BUNDLE_VIM_PATH}
-                   COMMAND cmake -E remove -f ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
                    COMMAND cmake -E remove -f ${VIM_RUNTIME_PATH_IN_BUNDLE}
-                   COMMAND cp -R ${PSMTBC_FRAMEWORK} ${PSMTBC_FRAMEWORK_PATH_IN_BUNDLE}
+                   COMMAND rsync -az ${PSMTBC_FRAMEWORK} ${VIM_BUNDLE_FRAMEWORK_PATH}
                    COMMAND cmake -E copy_directory ${VIM_RUNTIME_PATH} ${VIM_RUNTIME_PATH_IN_BUNDLE}
-                   COMMAND sh -c "cd ${VIM_RUNTIME_PATH_IN_BUNDLE}/doc && vim -u NONE -esX -c 'helptags ++t .' -c quit"
-                   COMMENT "Adding ${PSMTBC_FRAMEWORK} to ${VIM_BUNDLE_FRAMEWORK_PATH}" VERBATIM)
+                   COMMAND sh -c "cd ${VIM_RUNTIME_PATH_IN_BUNDLE}/doc && vim -u NONE -esX -c 'helptags ++t .' -c quit" VERBATIM)
 
 install(TARGETS ${PROGNAME} BUNDLE DESTINATION /Applications)
 install(PROGRAMS mac/gvim DESTINATION bin)
