@@ -8,6 +8,17 @@ vim-cocoa is a Mac OS X native vim GUI implementation in Cocoa, it started
 as a Google Summer of Code 2007 project, it's now maintaining by Jjgod Jiang
 <gzjjgod@gmail.com>.
 
+Build instructions
+------------------
+
+  git clone https://github.com/jjgod/vim-cocoa.git
+  cd vim-cocoa
+  mkdir build
+  cd build
+  cmake ../src
+  make
+  ./Vim.app/Contents/MacOS/Vim -g
+
 What's the differences between the original vim, MacVim and vim-cocoa?
 ----------------------------------------------------------------------
 
