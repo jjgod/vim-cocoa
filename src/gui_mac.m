@@ -100,7 +100,8 @@ static struct
 #define kVIMWindowStyle         (NSWindowStyleMaskTitled | \
                          NSWindowStyleMaskMiniaturizable | \
                                NSWindowStyleMaskClosable | \
-                              NSWindowStyleMaskResizable)
+                              NSWindowStyleMaskResizable | \
+                     NSWindowStyleMaskTexturedBackground)
 
 /* Was using kATSItalicSkew before Fix2X() deprecated, so we define
  * the same value but in floating number instead of fixed */
