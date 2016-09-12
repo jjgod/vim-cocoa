@@ -1458,7 +1458,7 @@ int gui_mch_dialog(
 #define Green(c)    ((c & 0x0000FF00) >>  8)
 #define Blue(c)     ((c & 0x000000FF) >>  0)
 
-long_u gui_mch_get_rgb(guicolor_T pixel)
+guicolor_T gui_mch_get_rgb(guicolor_T pixel)
 {
     return (Red(pixel) << 16) + (Green(pixel) << 8) + Blue(pixel);
 }

@@ -3,11 +3,11 @@
 cmake_minimum_required(VERSION 2.6)
 project(VIM)
 
-set(VIMMAJOR 7)
-set(VIMMINOR 4)
-set(VIMPATCH 2156)
+set(VIMMAJOR 8)
+set(VIMMINOR 0)
+set(VIMPATCH 0002)
 set(VIM_VERSION       "${VIMMAJOR}.${VIMMINOR}.${VIMPATCH}")
-set(VIM_COCOA_VERSION "0.10")
+set(VIM_COCOA_VERSION "0.11")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
