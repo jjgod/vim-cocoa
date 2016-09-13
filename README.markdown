@@ -48,6 +48,11 @@ goals for vim-cocoa too).
 What's New?
 -----------
 
+### 0.11.1
+
+* Update to vim 8.0.3.
+* Disable macOS Press and Hold.
+
 ### 0.10
 
 * Update to vim 7.4.2156.
