@@ -2491,6 +2491,11 @@ unsigned int has_fname(char_u *fname)
 
 @implementation VimAppController
 
++ (void) initialize
+{
+    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ @"ApplePressAndHoldEnabled": @NO }];
+}
+
 - (void) application:(NSApplication *)sender openFiles:(NSArray *)filenames
 {
     char_u **fnames;
